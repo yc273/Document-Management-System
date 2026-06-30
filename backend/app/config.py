@@ -1,0 +1,107 @@
+"""
+应用配置文件
+包含数据库配置、上传配置、安全配置等
+"""
+import os
+from datetime import timedelta
+
+
+class Config:
+    """基础配置类"""
+
+    # 密钥配置（生产环境需要修改为随机字符串）
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'doc-management-system-secret-key-2024'
+
+    # ========== 数据库配置 ==========
+    # MySQL数据库配置
+    MYSQL_HOST = os.environ.get('MYSQL_HOST') or 'localhost'
+    MYSQL_PORT = int(os.environ.get('MYSQL_PORT') or 3306)
+    MYSQL_USER = os.environ.get('MYSQL_USER') or 'root'
+    MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD') or '123456'
+    MYSQL_DB = os.environ.get('MYSQL_DB') or 'doc_management'
+
+    # SQLAlchemy数据库URI
+    SQLALCHEMY_DATABASE_URI = f'mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}?charset=utf8mb4'
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ECHO = False  # 开发环境可设置为True查看SQL语句
+
+    # ========== 文件上传配置 ==========
+    # 上传文件夹路径
+    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+    UPLOAD_DOCUMENTS = os.path.join(UPLOAD_FOLDER, 'documents')  # 文档存储
+    UPLOAD_AVATARS = os.path.join(UPLOAD_FOLDER, 'avatars')      # 头像存储
+    UPLOAD_TEMP = os.path.join(UPLOAD_FOLDER, 'temp')           # 临时文件
+
+    # 文件大小限制（100MB）
+    MAX_CONTENT_LENGTH = 100 * 1024 * 1024
+
+    # 允许上传的文件类型
+    ALLOWED_EXTENSIONS = {
+        # 文档类
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv',
+        # 图片类
+        'png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp',
+        # 压缩包
+        'zip', 'rar', '7z',
+        # 其他
+        'md', 'json', 'xml'
+    }
+
+    # ========== 用户存储配置 ==========
+    # 默认存储空间限制（1GB）
+    DEFAULT_STORAGE_LIMIT = 1 * 1024 * 1024 * 1024
+
+    # 管理员存储空间限制（10GB）
+    ADMIN_STORAGE_LIMIT = 10 * 1024 * 1024 * 1024
+
+    # ========== Session配置 ==========
+    PERMANENT_SESSION_LIFETIME = timedelta(days=7)  # Session有效期7天
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+
+    # ========== 分页配置 ==========
+    ITEMS_PER_PAGE = 20  # 每页显示条数
+
+    # ========== 文件分享配置 ==========
+    SHARE_DEFAULT_EXPIRE_DAYS = 7  # 默认分享有效期（天）
+    SHARE_MAX_EXPIRE_DAYS = 30     # 最大分享有效期（天）
+
+    # ========== 日志配置 ==========
+    LOG_LEVEL = 'INFO'
+    LOG_FILE = os.path.join(BASE_DIR, 'logs', 'app.log')
+
+    # ========== CORS配置 ==========
+    CORS_ORIGINS = '*'  # 允许所有来源（局域网访问需要）
+
+
+class DevelopmentConfig(Config):
+    """开发环境配置"""
+    DEBUG = True
+    SQLALCHEMY_ECHO = True  # 显示SQL语句
+
+
+class ProductionConfig(Config):
+    """生产环境配置"""
+    DEBUG = False
+    SQLALCHEMY_ECHO = False
+
+    # 生产环境必须设置环境变量
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise ValueError("生产环境必须设置SECRET_KEY环境变量")
+
+
+class TestingConfig(Config):
+    """测试环境配置"""
+    TESTING = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'  # 使用内存数据库
+
+
+# 配置字典
+config = {
+    'development': DevelopmentConfig,
+    'production': ProductionConfig,
+    'testing': TestingConfig,
+    'default': DevelopmentConfig
+}
