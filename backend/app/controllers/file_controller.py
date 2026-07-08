@@ -108,7 +108,8 @@ def upload_file():
                 data=storage_info
             )
 
-        # 保存文件
+        # 保存文件（重置流位置，因为前面已读取到临时文件）
+        file.seek(0)
         file_info = UploadService.save_file(file, current_user.id, folder_id)
 
         # 创建文档记录

@@ -47,7 +47,7 @@ class File(db.Model):
     # 版本关系
     versions = db.relationship('Version', backref='file', lazy='dynamic', cascade='all, delete-orphan')
     # 分享关系
-    shares = db.relationship('Share', backref='file', lazy='dynamic', cascade='all, delete-orphan')
+    shares = db.relationship('Share', back_populates='file', lazy='dynamic', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<File {self.filename}>'

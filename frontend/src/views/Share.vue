@@ -182,6 +182,105 @@
       @success="handleShareSuccess"
     />
 
+    <!-- 选择文件对话框 -->
+    <el-dialog
+      v-model="filePickerVisible"
+      title="选择要分享的文件"
+      width="700px"
+      top="5vh"
+      @opened="loadPickerData"
+    >
+      <div class="file-picker">
+        <!-- 面包屑导航 -->
+        <div class="picker-breadcrumb">
+          <el-button
+            v-if="pickerFolderId !== 0"
+            text
+            size="small"
+            @click="navigateToFolder(0)"
+          >
+            <el-icon><FolderOpened /></el-icon>
+            全部文件
+          </el-button>
+          <el-button
+            v-for="(crumb, idx) in breadcrumb"
+            :key="idx"
+            text
+            size="small"
+            @click="navigateToFolder(crumb.id)"
+          >
+            <template v-if="idx < breadcrumb.length - 1">
+              <el-icon><FolderOpened /></el-icon>
+              {{ crumb.name }}
+              <el-icon class="sep"><ArrowRight /></el-icon>
+            </template>
+            <template v-else>
+              <el-icon><FolderOpened /></el-icon>
+              {{ crumb.name }}
+            </template>
+          </el-button>
+        </div>
+
+        <el-table
+          :data="pickerItems"
+          v-loading="fileLoading"
+          highlight-current-row
+          @row-click="handlePickerRowClick"
+        >
+          <el-table-column label="名称" min-width="280">
+            <template #default="{ row }">
+              <div class="file-name-cell">
+                <el-icon
+                  :size="20"
+                  :color="row._isFolder ? '#e6a23c' : getFileIconColor(row.file_type)"
+                >
+                  <FolderOpened v-if="row._isFolder" />
+                  <component v-else :is="getFileIcon(row.file_type)" />
+                </el-icon>
+                <span class="file-name-text">{{ row._isFolder ? row.name : row.original_name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="大小" width="100" align="center">
+            <template #default="{ row }">
+              <span v-if="!row._isFolder">{{ row.file_size_readable }}</span>
+              <span v-else class="text-muted">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" width="80" align="center">
+            <template #default="{ row }">
+              <span v-if="!row._isFolder">{{ row.file_type }}</span>
+              <span v-else class="text-muted">文件夹</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100" align="center">
+            <template #default="{ row }">
+              <el-button
+                v-if="!row._isFolder"
+                type="primary"
+                size="small"
+                @click.stop="handleFileSelect(row)"
+              >
+                分享
+              </el-button>
+              <el-button
+                v-else
+                type="info"
+                size="small"
+                @click.stop="navigateToFolder(row.id)"
+              >
+                进入
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <template #footer>
+        <el-button @click="filePickerVisible = false">取消</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 分享统计对话框 -->
     <el-dialog
       v-model="statsDialogVisible"
@@ -245,6 +344,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { getShareList, cancelShare } from '@/api/share'
 import { getFileList } from '@/api/file'
+import { getFolderList } from '@/api/folder'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Share,
@@ -257,7 +357,9 @@ import {
   Document,
   Picture,
   Headset,
-  Files
+  Files,
+  FolderOpened,
+  ArrowRight
 } from '@element-plus/icons-vue'
 import ShareDialog from '@/components/ShareDialog.vue'
 import dayjs from 'dayjs'
@@ -275,6 +377,14 @@ const shareDialogVisible = ref(false)
 const statsDialogVisible = ref(false)
 const selectedFile = ref(null)
 const currentShare = ref(null)
+
+// 文件选择器
+const filePickerVisible = ref(false)
+const fileLoading = ref(false)
+const pickerItems = ref([])
+const pickerFolderId = ref(0)
+const allFolders = ref([])
+const breadcrumb = ref([])
 
 // 加载分享列表
 const loadShareList = async () => {
@@ -301,9 +411,107 @@ const handleSelectionChange = (selection) => {
   selectedShares.value = selection
 }
 
+// 构建面包屑
+const buildBreadcrumb = (folderId, folders) => {
+  const crumbs = []
+  let currentId = folderId
+  const folderMap = {}
+  folders.forEach(f => { folderMap[f.id] = f })
+  while (currentId && currentId !== 0 && folderMap[currentId]) {
+    crumbs.unshift({ id: folderMap[currentId].id, name: folderMap[currentId].name })
+    currentId = folderMap[currentId].parent_id || 0
+  }
+  return crumbs
+}
+
+// 加载文件选择器数据
+const loadPickerData = async () => {
+  fileLoading.value = true
+  try {
+    // 加载文件夹列表（全部）
+    const folderRes = await getFolderList()
+    let folders = []
+    if (folderRes.code === 200) {
+      // 扁平化树形结构
+      const flatten = (list) => {
+        list.forEach(f => {
+          folders.push(f)
+          if (f.children && f.children.length > 0) flatten(f.children)
+        })
+      }
+      flatten(folderRes.data.folders || [])
+    }
+    allFolders.value = folders
+
+    // 加载文件和当前层文件夹
+    await loadPickerFolder(pickerFolderId.value)
+  } catch (error) {
+    ElMessage.error('加载数据失败')
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+// 加载指定文件夹的内容
+const loadPickerFolder = async (folderId) => {
+  fileLoading.value = true
+  pickerFolderId.value = folderId
+  breadcrumb.value = buildBreadcrumb(folderId, allFolders.value)
+
+  try {
+    // 获取当前层子文件夹
+    const subFolders = allFolders.value.filter(f => (f.parent_id || 0) === folderId)
+
+    // 获取当前层文件
+    const fileRes = await getFileList({
+      page: 1,
+      per_page: 9999,
+      folder_id: folderId
+    })
+
+    const files = fileRes.code === 200 ? (fileRes.data.files || []) : []
+
+    // 合并：文件夹在前，文件在后
+    pickerItems.value = [
+      ...subFolders.map(f => ({ ...f, _isFolder: true })),
+      ...files.map(f => ({ ...f, _isFolder: false }))
+    ]
+  } catch (error) {
+    ElMessage.error('加载文件列表失败')
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+// 导航到文件夹
+const navigateToFolder = (folderId) => {
+  loadPickerFolder(folderId)
+}
+
+// 表格行点击
+const handlePickerRowClick = (row) => {
+  if (row._isFolder) {
+    navigateToFolder(row.id)
+  } else {
+    handleFileSelect(row)
+  }
+}
+
+// 选择文件
+const handleFileSelect = (file) => {
+  selectedFile.value = file
+  filePickerVisible.value = false
+  // 延迟打开分享对话框，等待文件选择器关闭动画
+  setTimeout(() => {
+    shareDialogVisible.value = true
+  }, 300)
+}
+
 // 创建分享
 const handleCreateShare = () => {
-  ElMessage.info('请先在文件管理页面选择文件进行分享')
+  pickerFolderId.value = 0
+  breadcrumb.value = []
+  filePickerVisible.value = true
 }
 
 // 复制链接
@@ -645,6 +853,60 @@ onMounted(() => {
 
 .info-item .value {
   color: #333;
+  font-weight: 500;
+}
+
+/* 文件选择器 */
+.file-picker {
+  max-height: 450px;
+  overflow-y: auto;
+}
+
+.picker-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 12px;
+}
+
+.picker-breadcrumb .el-button {
+  font-size: 13px;
+}
+
+.picker-breadcrumb .sep {
+  font-size: 12px;
+  color: #999;
+  margin: 0 2px;
+}
+
+.file-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-name-text {
+  font-size: 14px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-muted {
+  color: #999;
+  font-size: 13px;
+}
+
+.picker-breadcrumb .el-button {
+  color: #666;
+}
+
+.picker-breadcrumb .el-button:last-child {
+  color: #409eff;
   font-weight: 500;
 }
 

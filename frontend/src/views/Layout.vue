@@ -42,14 +42,61 @@
       </el-menu>
     </el-aside>
 
+    <!-- 移动端抽屉菜单 -->
+    <el-drawer
+      v-model="mobileDrawer"
+      :with-header="false"
+      size="200px"
+      direction="ltr"
+      class="mobile-drawer"
+    >
+      <div class="logo">
+        <el-icon class="logo-icon"><Document /></el-icon>
+        <span class="logo-text">文档管理</span>
+      </div>
+      <el-menu
+        :default-active="activeMenu"
+        :unique-opened="true"
+        router
+        class="layout-menu"
+        @select="mobileDrawer = false"
+      >
+        <el-menu-item index="/dashboard">
+          <el-icon><House /></el-icon>
+          <template #title>首页</template>
+        </el-menu-item>
+        <el-menu-item index="/files">
+          <el-icon><Folder /></el-icon>
+          <template #title>文件管理</template>
+        </el-menu-item>
+        <el-menu-item index="/share">
+          <el-icon><Share /></el-icon>
+          <template #title>我的分享</template>
+        </el-menu-item>
+        <el-menu-item index="/trash">
+          <el-icon><Delete /></el-icon>
+          <template #title>回收站</template>
+        </el-menu-item>
+        <el-menu-item index="/statistics">
+          <el-icon><DataAnalysis /></el-icon>
+          <template #title>数据统计</template>
+        </el-menu-item>
+      </el-menu>
+    </el-drawer>
+
     <!-- 主内容区 -->
     <el-container class="layout-main">
       <!-- 顶部栏 -->
       <el-header class="layout-header">
         <div class="header-left">
-          <el-icon class="collapse-icon" @click="toggleCollapse">
+          <!-- 桌面端折叠按钮 -->
+          <el-icon class="collapse-icon desktop-only" @click="toggleCollapse">
             <Fold v-if="!isCollapse" />
             <Expand v-else />
+          </el-icon>
+          <!-- 移动端菜单按钮 -->
+          <el-icon class="collapse-icon mobile-only" @click="mobileDrawer = true">
+            <Fold />
           </el-icon>
 
           <el-breadcrumb separator="/">
@@ -112,6 +159,9 @@ const userStore = useUserStore()
 
 // 侧边栏折叠状态
 const isCollapse = ref(false)
+
+// 移动端抽屉
+const mobileDrawer = ref(false)
 
 // 用户信息
 const user = computed(() => userStore.user || {})
@@ -266,5 +316,69 @@ const handleCommand = (command) => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 桌面端隐藏/显示 */
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none !important;
+  }
+}
+
+/* 移动端样式 */
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  .layout-aside {
+    display: none !important;
+  }
+
+  .layout-header {
+    padding: 0 12px !important;
+  }
+
+  .layout-content {
+    padding: 12px !important;
+  }
+
+  .header-left {
+    min-width: 0 !important;
+  }
+}
+
+/* 移动端抽屉菜单背景色 */
+:deep(.mobile-drawer) {
+  background: #304156;
+}
+
+:deep(.mobile-drawer .el-drawer__body) {
+  padding: 0;
+  background: #304156;
+}
+
+:deep(.mobile-drawer .logo) {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2b3a4d;
+  color: #fff;
+}
+
+:deep(.mobile-drawer .logo-icon) {
+  font-size: 24px;
+  margin-right: 8px;
+}
+
+:deep(.mobile-drawer .logo-text) {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+:deep(.mobile-drawer .el-menu) {
+  border-right: none;
+  background: #304156;
 }
 </style>

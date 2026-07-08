@@ -2,7 +2,8 @@
 分享管理控制器
 处理文档分享、访问权限等操作
 """
-from flask import Blueprint, request, jsonify
+import os
+from flask import Blueprint, request, jsonify, send_file
 from flask_login import current_user, login_required
 
 from app.extensions import db
@@ -161,3 +162,36 @@ def get_share_stats(share_id):
     return success({
         'share': share.to_dict()
     })
+
+
+@share_bp.route('/<share_code>/download', methods=['GET'])
+def download_share_file(share_code):
+    """
+    通过分享下载文件
+    GET /api/share/<share_code>/download
+    """
+    share = Share.get_share_by_code(share_code)
+
+    if not share:
+        return not_found('分享不存在')
+
+    if share.is_expired():
+        return error(message='分享已过期', code=403)
+
+    file = share.file
+    if not file:
+        return not_found('文件不存在')
+
+    # 检查物理文件是否存在
+    if not os.path.exists(file.file_path):
+        return not_found('文件不存在')
+
+    # 增加下载次数
+    share.increment_download()
+    file.increment_download()
+
+    return send_file(
+        file.file_path,
+        as_attachment=True,
+        download_name=file.original_name
+    )

@@ -123,7 +123,7 @@ def get_upload_stats():
     daily_stats = []
     for date, count in upload_stats:
         daily_stats.append({
-            'date': date.strftime('%Y-%m-%d'),
+            'date': date,
             'count': count
         })
 

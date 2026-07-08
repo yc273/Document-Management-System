@@ -38,7 +38,7 @@ class Share(db.Model):
     # 创建者关系
     creator = db.relationship('User', backref='shares', lazy='select')
     # 文件关系
-    file = db.relationship('File', backref='shares', lazy='select')
+    file = db.relationship('File', back_populates='shares', lazy='select')
 
     def __repr__(self):
         return f'<Share {self.share_code}>'

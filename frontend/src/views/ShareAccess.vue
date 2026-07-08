@@ -209,7 +209,7 @@ const handleVerifyPassword = async () => {
 const handleDownload = async () => {
   downloading.value = true
   try {
-    const url = `${import.meta.env.VITE_API_BASE_URL || ''}/api/file/download/${shareInfo.value.file_id}`
+    const url = `${import.meta.env.VITE_API_BASE_URL || ''}/api/share/${shareCode.value}/download`
     window.open(url, '_blank')
 
     // 增加下载计数
