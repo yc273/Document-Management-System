@@ -87,7 +87,7 @@ def check_file_permission(user_id, file_id):
     """
     from app.models.file import File
 
-    file = File.query.get(file_id)
+    file = File.query.filter_by(id=file_id).first()
 
     if not file:
         return False
@@ -98,7 +98,7 @@ def check_file_permission(user_id, file_id):
 
     # 管理员有权限
     from app.models.user import User
-    user = User.query.get(user_id)
+    user = User.query.filter_by(id=user_id).first()
     if user and user.is_admin():
         return True
 
@@ -118,9 +118,13 @@ def check_folder_permission(user_id, folder_id):
     Returns:
         bool: 是否有权限
     """
+    # 根目录（folder_id=0）所有用户都有权限
+    if folder_id == 0:
+        return True
+
     from app.models.folder import Folder
 
-    folder = Folder.query.get(folder_id)
+    folder = Folder.query.filter_by(id=folder_id).first()
 
     if not folder:
         return False
@@ -131,7 +135,7 @@ def check_folder_permission(user_id, folder_id):
 
     # 管理员有权限
     from app.models.user import User
-    user = User.query.get(user_id)
+    user = User.query.filter_by(id=user_id).first()
     if user and user.is_admin():
         return True
 

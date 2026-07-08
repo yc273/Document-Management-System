@@ -18,12 +18,12 @@ class File(db.Model):
     filename = db.Column(db.String(255), nullable=False, comment='文件名（含扩展名）')
     original_name = db.Column(db.String(255), nullable=False, comment='原始文件名')
     file_type = db.Column(db.String(20), nullable=False, index=True, comment='文件类型')
-    file_size = db.Column(db.BigInteger, nullable=False, comment='文件大小（字节）')
+    file_size = db.Column(db.Integer, nullable=False, comment='文件大小（字节）')
     file_path = db.Column(db.String(500), nullable=False, comment='存储路径')
     file_hash = db.Column(db.String(64), nullable=True, index=True, comment='文件哈希值')
 
     # ========== 归属字段 ==========
-    folder_id = db.Column(db.Integer, db.ForeignKey('doc_folder.id'), nullable=False, default=0, index=True, comment='所属文件夹ID')
+    folder_id = db.Column(db.Integer, db.ForeignKey('doc_folder.id'), nullable=True, default=0, index=True, comment='所属文件夹ID')
     user_id = db.Column(db.Integer, db.ForeignKey('sys_user.id'), nullable=False, index=True, comment='上传用户')
 
     # ========== 版本字段 ==========
@@ -34,7 +34,7 @@ class File(db.Model):
     view_count = db.Column(db.Integer, nullable=False, default=0, comment='查看次数')
 
     # ========== 删除标记 ==========
-    is_deleted = db.Column(db.SmallInt, nullable=False, default=0, index=True, comment='是否删除：1是 0否')
+    is_deleted = db.Column(db.Integer, nullable=False, default=0, index=True, comment='是否删除：1是 0否')
     deleted_at = db.Column(db.DateTime, nullable=True, comment='删除时间')
 
     # ========== 时间字段 ==========

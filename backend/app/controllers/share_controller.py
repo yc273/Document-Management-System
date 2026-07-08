@@ -36,7 +36,7 @@ def create_share():
         return bad_request('文档ID不能为空')
 
     file_id = data.get('file_id')
-    password = data.get('password', '').strip()
+    password = (data.get('password') or '').strip()
     expire_days = data.get('expire_days', 7)
 
     # 检查文档权限
@@ -111,8 +111,7 @@ def access_share(share_code):
     share.increment_view()
 
     return success({
-        'share': share.to_dict(),
-        'file': share.file.to_dict() if share.file else None
+        'share': share.to_dict(include_file=True)
     })
 
 
@@ -143,3 +142,22 @@ def verify_share_password(share_code):
         return error(message='密码错误', code=401)
 
     return success(message='密码验证成功')
+
+
+@share_bp.route('/stats/<int:share_id>', methods=['GET'])
+@login_required_json
+@active_required
+def get_share_stats(share_id):
+    """
+    获取分享统计
+    GET /api/share/stats/<share_id>
+    """
+    share = Share.query.get_or_404(share_id)
+
+    # 权限检查
+    if share.created_by != current_user.id:
+        return error(message='没有权限查看该分享统计', code=403)
+
+    return success({
+        'share': share.to_dict()
+    })

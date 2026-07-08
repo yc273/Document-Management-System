@@ -24,11 +24,11 @@ class User(db.Model, UserMixin):
 
     # ========== 权限字段 ==========
     role = db.Column(db.String(20), nullable=False, default='user', comment='角色：admin/user')
-    status = db.Column(db.SmallInt, nullable=False, default=1, comment='状态：1启用 0禁用')
+    status = db.Column(db.Integer, nullable=False, default=1, comment='状态：1启用 0禁用')
 
     # ========== 存储字段 ==========
-    storage_limit = db.Column(db.BigInteger, nullable=False, default=1073741824, comment='存储限制（字节）1GB')
-    storage_used = db.Column(db.BigInteger, nullable=False, default=0, comment='已使用存储（字节）')
+    storage_limit = db.Column(db.Integer, nullable=False, default=1073741824, comment='存储限制（字节）1GB')
+    storage_used = db.Column(db.Integer, nullable=False, default=0, comment='已使用存储（字节）')
 
     # ========== 时间字段 ==========
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.now, comment='创建时间')
@@ -36,13 +36,13 @@ class User(db.Model, UserMixin):
 
     # ========== 关系字段 ==========
     # 文件夹关系
-    folders = db.relationship('Folder', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
+    folders = db.relationship('Folder', backref='owner', lazy='dynamic')
     # 文档关系
-    files = db.relationship('File', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
+    files = db.relationship('File', backref='owner', lazy='dynamic')
     # 标签关系
-    tags = db.relationship('Tag', backref='owner', lazy='dynamic', cascade='all, delete-orphan')
+    tags = db.relationship('Tag', backref='owner', lazy='dynamic')
     # 操作日志关系
-    logs = db.relationship('Log', backref='user', lazy='dynamic', cascade='all, delete-orphan')
+    logs = db.relationship('Log', backref='user', lazy='dynamic')
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -152,10 +152,10 @@ class User(db.Model, UserMixin):
 
         # 设置默认存储限制
         if role == 'admin':
-            from app.config import Config
+            from config import Config
             user.storage_limit = Config.ADMIN_STORAGE_LIMIT
         else:
-            from app.config import Config
+            from config import Config
             user.storage_limit = Config.DEFAULT_STORAGE_LIMIT
 
         db.session.add(user)

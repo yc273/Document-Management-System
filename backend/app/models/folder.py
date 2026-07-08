@@ -15,7 +15,7 @@ class Folder(db.Model):
     # ========== 基础字段 ==========
     id = db.Column(db.Integer, primary_key=True, autoincrement=True, comment='文件夹ID')
     name = db.Column(db.String(100), nullable=False, comment='文件夹名称')
-    parent_id = db.Column(db.Integer, nullable=False, default=0, index=True, comment='父文件夹ID（0为根目录）')
+    parent_id = db.Column(db.Integer, db.ForeignKey('doc_folder.id'), nullable=True, default=None, index=True, comment='父文件夹ID（NULL为根目录）')
     user_id = db.Column(db.Integer, db.ForeignKey('sys_user.id'), nullable=False, index=True, comment='所属用户')
 
     # ========== 路径字段 ==========
@@ -31,12 +31,12 @@ class Folder(db.Model):
     # 子文件夹关系（自关联）
     children = db.relationship(
         'Folder',
+        primaryjoin='Folder.parent_id == Folder.id',
         backref=db.backref('parent', remote_side=[id]),
-        lazy='dynamic',
-        cascade='all, delete-orphan'
+        lazy='dynamic'
     )
     # 文档关系
-    files = db.relationship('File', backref='folder', lazy='dynamic', cascade='all, delete-orphan')
+    files = db.relationship('File', backref='folder', lazy='dynamic')
 
     def __repr__(self):
         return f'<Folder {self.name}>'

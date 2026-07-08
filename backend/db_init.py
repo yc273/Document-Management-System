@@ -43,7 +43,7 @@ def init_database():
             admin.set_password('admin123')
 
             # 设置管理员存储限制为10GB
-            from app.config import Config
+            from config import Config
             admin.storage_limit = Config.ADMIN_STORAGE_LIMIT
 
             db.session.add(admin)
@@ -118,7 +118,7 @@ def reset_database():
                 role='admin'
             )
             admin.set_password('admin123')
-            from app.config import Config
+            from config import Config
             admin.storage_limit = Config.ADMIN_STORAGE_LIMIT
 
             db.session.add(admin)

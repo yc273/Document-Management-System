@@ -37,18 +37,23 @@ class Share(db.Model):
     # ========== 关系字段 ==========
     # 创建者关系
     creator = db.relationship('User', backref='shares', lazy='select')
+    # 文件关系
+    file = db.relationship('File', backref='shares', lazy='select')
 
     def __repr__(self):
         return f'<Share {self.share_code}>'
 
-    def to_dict(self):
+    def to_dict(self, include_file=False):
         """
         序列化为字典
+
+        Args:
+            include_file: 是否包含文件信息
 
         Returns:
             dict: 分享信息
         """
-        return {
+        data = {
             'id': self.id,
             'share_code': self.share_code,
             'file_id': self.file_id,
@@ -61,6 +66,16 @@ class Share(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
             'is_expired': self.is_expired()
         }
+
+        # 如果需要文件信息且文件存在
+        if include_file and self.file:
+            data['file_name'] = self.file.original_name
+            data['file_size'] = self.file.file_size
+            data['file_size_readable'] = f"{self.file.file_size / 1024 / 1024:.2f}MB"
+            data['file_type'] = self.file.file_type
+            data['nickname'] = self.creator.nickname if self.creator else '用户'
+
+        return data
 
     def is_expired(self):
         """

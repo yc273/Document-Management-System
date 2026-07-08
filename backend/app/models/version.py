@@ -17,7 +17,7 @@ class Version(db.Model):
     file_id = db.Column(db.Integer, db.ForeignKey('doc_file.id', ondelete='CASCADE'), nullable=False, index=True, comment='文档ID')
     version_number = db.Column(db.Integer, nullable=False, comment='版本号')
     file_path = db.Column(db.String(500), nullable=False, comment='文件路径')
-    file_size = db.Column(db.BigInteger, nullable=False, comment='文件大小')
+    file_size = db.Column(db.Integer, nullable=False, comment='文件大小')
 
     # ========== 备注字段 ==========
     remark = db.Column(db.String(255), nullable=True, comment='版本说明')

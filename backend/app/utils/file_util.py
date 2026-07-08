@@ -30,7 +30,7 @@ def allowed_file(filename, allowed_extensions=None):
 
     if allowed_extensions is None:
         # 默认允许的文件类型
-        from app.config import Config
+        from config import Config
         allowed_extensions = Config.ALLOWED_EXTENSIONS
 
     return extension in allowed_extensions

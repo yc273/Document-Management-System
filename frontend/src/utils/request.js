@@ -9,6 +9,7 @@ import { ElMessage } from 'element-plus'
 const request = axios.create({
   baseURL: '/api',
   timeout: 30000,
+  withCredentials: true,  // 支持跨域携带cookie
   headers: {
     'Content-Type': 'application/json'
   }
@@ -17,11 +18,8 @@ const request = axios.create({
 // 请求拦截器
 request.interceptors.request.use(
   config => {
-    // 从localStorage获取token
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`
-    }
+    // Session-based authentication: 后端Flask-Login通过cookie管理session
+    // 不需要手动添加Authorization header
     return config
   },
   error => {

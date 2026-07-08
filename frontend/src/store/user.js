@@ -29,8 +29,9 @@ export const useUserStore = defineStore('user', {
       try {
         const res = await login({ username, password })
 
-        // 保存token
-        this.token = 'dummy-token' // 实际应该从后端返回
+        // Session-based authentication: 后端通过cookie管理session
+        // 不需要手动保存token，Flask-Login会自动处理session cookie
+        this.token = 'session-active' // 标记session已激活
         localStorage.setItem('token', this.token)
 
         // 保存用户信息

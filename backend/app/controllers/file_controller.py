@@ -56,7 +56,7 @@ def upload_file():
         if not check_folder_permission(current_user.id, folder_id):
             return error(message='没有权限访问该文件夹', code=403)
 
-        folder = Folder.query.get(folder_id)
+        folder = Folder.query.filter_by(id=folder_id).first()
         if not folder:
             return not_found('文件夹不存在')
 
@@ -215,7 +215,7 @@ def update_file(file_id):
 
     请求体:
     {
-        "filename": "新文件名",
+        "original_name": "新文件名",
         "folder_id": "新文件夹ID"
     }
     """
@@ -230,7 +230,19 @@ def update_file(file_id):
     if not data:
         return bad_request('请求参数不能为空')
 
-    # 修改文件名
+    # 修改文件名（支持 original_name 和 filename 两种字段名）
+    if 'original_name' in data:
+        original_name = data.get('original_name', '').strip()
+        if original_name:
+            file.original_name = original_name
+            # 同时更新 filename，保持扩展名一致
+            if '.' in original_name:
+                file.filename = original_name
+            else:
+                # 保持原有扩展名
+                old_ext = file.filename.split('.')[-1] if '.' in file.filename else ''
+                file.filename = f"{original_name}.{old_ext}" if old_ext else original_name
+
     if 'filename' in data:
         filename = data.get('filename', '').strip()
         if filename:
@@ -322,7 +334,7 @@ def move_file():
     # 移动文档
     moved_count = 0
     for file_id in file_ids:
-        file = File.query.get(file_id)
+        file = File.query.filter_by(id=file_id).first()
         if file and file.user_id == current_user.id:
             file.folder_id = target_folder_id
             moved_count += 1
@@ -470,7 +482,7 @@ def batch_delete_files():
     # 批量删除
     deleted_count = 0
     for file_id in file_ids:
-        file = File.query.get(file_id)
+        file = File.query.filter_by(id=file_id).first()
         if file and file.user_id == current_user.id:
             file.soft_delete()
             deleted_count += 1

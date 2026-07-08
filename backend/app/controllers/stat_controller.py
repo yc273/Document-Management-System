@@ -42,7 +42,7 @@ def get_dashboard():
     ).order_by(File.created_at.desc()).limit(5).all()
 
     # 存储信息
-    user = User.query.get(current_user.id)
+    user = User.query.filter_by(id=current_user.id).first()
     storage_info = user.get_storage_info() if user else {}
 
     return success({
@@ -63,7 +63,7 @@ def get_storage_stats():
     获取存储空间统计
     GET /api/stat/storage
     """
-    user = User.query.get(current_user.id)
+    user = User.query.filter_by(id=current_user.id).first()
     if not user:
         return success({'storage': {}})
 

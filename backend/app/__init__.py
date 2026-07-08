@@ -11,7 +11,7 @@ from flask_cors import CORS
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from config import config
-from app.extensions import init_extensions
+from app.extensions import db, init_extensions
 
 
 def create_app(config_name='development'):
@@ -34,12 +34,24 @@ def create_app(config_name='development'):
     # 初始化扩展插件
     init_extensions(app)
 
-    # 配置CORS（跨域资源共享）- 支持局域网访问
+    # 配置CORS（跨域资源共享）- 支持局域网访问和凭证
+    # 在开发环境中，为了方便测试，我们允许特定的本地和局域网地址
     CORS(app, resources={
         r"/api/*": {
-            "origins": "*",
+            "origins": [
+                "http://localhost:5173",
+                "http://localhost:5174",
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:5174",
+                # 支持两个网络接口的所有端口
+                "http://192.168.1.102:5173",
+                "http://192.168.1.102:5174",
+                "http://192.168.50.236:5173",
+                "http://192.168.50.236:5174"
+            ],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"]
+            "allow_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True
         }
     })
 

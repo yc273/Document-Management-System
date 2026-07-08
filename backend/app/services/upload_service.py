@@ -180,7 +180,7 @@ class UploadService:
 
         if existing_file:
             # 复制文件记录（不同文件夹）
-            from app.models import db
+            from app.extensions import db
             new_file = File(
                 filename=existing_file.filename,
                 original_name=existing_file.original_name,

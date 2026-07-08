@@ -44,3 +44,14 @@ export function getLogs(params) {
     params
   })
 }
+
+/**
+ * 获取日志统计
+ */
+export function getLogStats(days = 7) {
+  return request({
+    url: '/stat/log',
+    method: 'get',
+    params: { days }
+  })
+}

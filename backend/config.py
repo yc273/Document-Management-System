@@ -12,22 +12,18 @@ class Config:
     # 密钥配置（生产环境需要修改为随机字符串）
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'doc-management-system-secret-key-2024'
 
-    # ========== 数据库配置 ==========
-    # MySQL数据库配置
-    MYSQL_HOST = os.environ.get('MYSQL_HOST') or 'localhost'
-    MYSQL_PORT = int(os.environ.get('MYSQL_PORT') or 3306)
-    MYSQL_USER = os.environ.get('MYSQL_USER') or 'root'
-    MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD') or '123456'
-    MYSQL_DB = os.environ.get('MYSQL_DB') or 'doc_management'
+    # ========== 基础路径配置 ==========
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    # SQLAlchemy数据库URI
-    SQLALCHEMY_DATABASE_URI = f'mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}?charset=utf8mb4'
+    # ========== 数据库配置 ==========
+    # SQLite数据库（无需安装MySQL，自动创建db文件）
+    db_path = os.path.join(BASE_DIR, 'doc_management.db')
+    SQLALCHEMY_DATABASE_URI = f'sqlite:///{db_path}'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False  # 开发环境可设置为True查看SQL语句
 
     # ========== 文件上传配置 ==========
     # 上传文件夹路径
-    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
     UPLOAD_DOCUMENTS = os.path.join(UPLOAD_FOLDER, 'documents')  # 文档存储
     UPLOAD_AVATARS = os.path.join(UPLOAD_FOLDER, 'avatars')      # 头像存储
@@ -87,9 +83,7 @@ class ProductionConfig(Config):
     SQLALCHEMY_ECHO = False
 
     # 生产环境必须设置环境变量
-    SECRET_KEY = os.environ.get('SECRET_KEY')
-    if not SECRET_KEY:
-        raise ValueError("生产环境必须设置SECRET_KEY环境变量")
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'change-this-in-production'
 
 
 class TestingConfig(Config):

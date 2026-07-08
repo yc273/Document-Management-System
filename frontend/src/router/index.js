@@ -18,6 +18,12 @@ const routes = [
     meta: { title: '注册', requiresAuth: false }
   },
   {
+    path: '/share/:shareCode',
+    name: 'ShareAccess',
+    component: () => import('@/views/ShareAccess.vue'),
+    meta: { title: '分享访问', requiresAuth: false }
+  },
+  {
     path: '/',
     component: () => import('@/views/Layout.vue'),
     redirect: '/dashboard',

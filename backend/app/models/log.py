@@ -23,9 +23,7 @@ class Log(db.Model):
     # ========== 时间字段 ==========
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True, comment='创建时间')
 
-    # ========== 关系字段 ==========
-    # 用户关系
-    user = db.relationship('User', backref='logs', lazy='select')
+    # 注意：用户关系由User.logs通过backref自动创建，无需在此定义
 
     def __repr__(self):
         return f'<Log {self.action} - {self.module}>'

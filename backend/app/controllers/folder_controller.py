@@ -33,12 +33,13 @@ def get_folder_list():
 
 
 @folder_bp.route('/', methods=['POST'])
+@folder_bp.route('', methods=['POST'])
 @login_required_json
 @active_required
 def create_folder():
     """
     创建文件夹
-    POST /api/folder
+    POST /api/folder 或 /api/folder/
 
     请求体:
     {
@@ -63,7 +64,7 @@ def create_folder():
         if not check_folder_permission(current_user.id, parent_id):
             return error(message='没有权限访问父文件夹', code=403)
 
-        parent = Folder.query.get(parent_id)
+        parent = Folder.query.filter_by(id=parent_id).first()
         if not parent:
             return not_found('父文件夹不存在')
 
@@ -218,7 +219,7 @@ def move_folder():
 
     # 检查目标文件夹
     if target_id != 0:
-        target = Folder.query.get(target_id)
+        target = Folder.query.filter_by(id=target_id).first()
         if not target:
             return not_found('目标文件夹不存在')
 
@@ -230,7 +231,7 @@ def move_folder():
         while current.parent_id != 0:
             if current.parent_id == folder_id:
                 return bad_request('不能将文件夹移动到其子目录')
-            current = Folder.query.get(current.parent_id)
+            current = Folder.query.filter_by(id=current.parent_id).first()
 
     # 移动文件夹
     folder.parent_id = target_id
