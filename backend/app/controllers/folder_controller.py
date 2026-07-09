@@ -27,8 +27,12 @@ def get_folder_list():
     # 获取用户的文件夹树
     folder_tree = Folder.get_folder_tree(current_user.id)
 
+    # 获取用户所有文件的总数（用于"全部文件"根节点显示）
+    total_files = File.query.filter_by(user_id=current_user.id, is_deleted=0).count()
+
     return success({
-        'folders': folder_tree
+        'folders': folder_tree,
+        'total_files': total_files
     })
 
 

@@ -2,7 +2,8 @@
   <div class="file-manager">
     <el-row :gutter="20" class="manager-row">
       <!-- 左侧文件夹树 -->
-      <el-col :xs="24" :sm="24" :md="6" :lg="5" :xl="4" class="folder-col">
+      <el-col :xs="24" :sm="24" :md="6" :lg="5" :xl="4" class="folder-col"
+        v-show="!isMobileView || showMobileTree">
         <el-card class="folder-card">
           <FolderTree
             ref="folderTreeRef"
@@ -17,6 +18,15 @@
         <el-card class="file-card">
           <!-- 面包屑导航 -->
           <div class="breadcrumb-bar" v-if="breadcrumbList.length > 0">
+            <el-button
+              v-if="isMobileView && !showMobileTree"
+              class="mobile-back-btn"
+              text
+              @click="goBackToFolders"
+            >
+              <el-icon><ArrowLeft /></el-icon>
+              <span>文件夹</span>
+            </el-button>
             <el-breadcrumb separator="/">
               <el-breadcrumb-item
                 v-for="item in breadcrumbList"
@@ -81,7 +91,7 @@
             <el-table :data="fileList" style="width: 100%" @selection-change="handleSelectionChange">
               <el-table-column type="selection" width="55" />
 
-              <el-table-column prop="original_name" label="文件名" min-width="200">
+              <el-table-column prop="original_name" label="文件名" min-width="200" show-overflow-tooltip>
                 <template #default="{ row }">
                   <div class="file-name-cell">
                     <el-icon :size="24" :color="getFileIconColor(row.file_type)">
@@ -100,7 +110,7 @@
               </el-table-column>
               <el-table-column prop="file_size_readable" label="大小" width="120" align="right" />
               <el-table-column prop="created_at" label="上传时间" width="180" align="center" />
-              <el-table-column label="操作" width="320" fixed="right" align="center">
+              <el-table-column label="操作" :width="isMobileView ? 300 : 320" :fixed="isMobileView ? false : 'right'" align="center" class-name="operations-col">
                 <template #default="{ row }">
                   <el-button-group>
                     <el-button type="primary" size="small" link @click="handleDownload(row)">
@@ -280,7 +290,7 @@ import { getBreadcrumb } from '@/api/folder'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Upload, FolderAdd, Search, Download, Delete, UploadFilled,
-  List, Grid, Edit, Document, Folder, Picture,
+  List, Grid, Edit, Document, Folder, Picture, ArrowLeft,
   Headset, Files, Share, FolderOpened
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
@@ -313,6 +323,10 @@ const uploadData = ref({
 const folderTreeRef = ref(null)
 const currentFolder = ref(null)
 const breadcrumbList = ref([])
+
+// 移动端：是否显示文件夹树（选择文件夹后自动隐藏）
+const showMobileTree = ref(true)
+const isMobileView = computed(() => window.innerWidth <= 768)
 
 // 重命名
 const renameVisible = ref(false)
@@ -381,6 +395,15 @@ const handleFolderSelect = (folder) => {
   currentPage.value = 1
   loadFiles()
   loadBreadcrumb(folder.id || 0)
+  // 移动端选择文件夹后自动隐藏文件夹树，让文件列表占满全屏
+  if (window.innerWidth <= 768) {
+    showMobileTree.value = false
+  }
+}
+
+// 移动端：返回文件夹树
+const goBackToFolders = () => {
+  showMobileTree.value = true
 }
 
 // 文件夹刷新
@@ -393,6 +416,10 @@ const handleBreadcrumbClick = (item) => {
   if (folderTreeRef.value) {
     folderTreeRef.value.setCurrentKey(item.id)
     handleFolderSelect(item)
+  }
+  // 移动端点击"全部文件"面包屑时返回文件夹树
+  if (item.id === 0 && window.innerWidth <= 768) {
+    showMobileTree.value = true
   }
 }
 
@@ -990,7 +1017,24 @@ onUnmounted(() => {
   opacity: 0;
 }
 
+/* 操作列按钮组 */
+.operations-col :deep(.el-button-group) {
+  white-space: nowrap;
+}
+
 /* 响应式 */
+/* 移动端返回按钮 */
+.mobile-back-btn {
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 14px;
+  color: #409eff;
+}
+
+.mobile-back-btn .el-icon {
+  margin-right: 4px;
+}
+
 @media (max-width: 768px) {
   .manager-row {
     flex-direction: column;
@@ -1004,8 +1048,29 @@ onUnmounted(() => {
 
   .file-col {
     width: 100% !important;
+    height: 100%;
   }
 
+  /* 移动端表格横向滚动 */
+  .list-view {
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .list-view :deep(.el-table__body-wrapper) {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+  .list-view :deep(.el-table__header-wrapper) {
+    overflow-x: auto;
+  }
+  .list-view :deep(.el-table) {
+    width: auto;
+    min-width: 100%;
+  }
+  .list-view :deep(.el-table__body-wrapper table),
+  .list-view :deep(.el-table__header-wrapper table) {
+    width: auto !important;
+  }
   .toolbar {
     flex-direction: column;
     align-items: stretch;

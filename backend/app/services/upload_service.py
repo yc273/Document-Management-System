@@ -167,7 +167,10 @@ class UploadService:
             folder_id: 文件夹ID
 
         Returns:
-            File or None: 如果存在重复文件则返回，否则返回None
+            dict: 包含处理结果的字典
+                {'status': 'exists', 'file': File}  —— 同一文件夹内已存在
+                {'status': 'created', 'file': File} —— 秒传成功，跨文件夹复制
+                {'status': 'none'}                   —— 无重复文件
         """
         from app.models.file import File
 
@@ -178,23 +181,34 @@ class UploadService:
             is_deleted=0
         ).first()
 
-        if existing_file:
-            # 复制文件记录（不同文件夹）
-            from app.extensions import db
-            new_file = File(
-                filename=existing_file.filename,
-                original_name=existing_file.original_name,
-                file_type=existing_file.file_type,
-                file_size=existing_file.file_size,
-                file_path=existing_file.file_path,
-                folder_id=folder_id,
-                user_id=user_id,
-                file_hash=existing_file.file_hash,
-                version=existing_file.version
-            )
-            db.session.add(new_file)
-            db.session.commit()
+        if not existing_file:
+            return {'status': 'none'}
 
-            return new_file
+        # 同一文件夹内已存在相同文件，不再重复上传
+        same_folder = File.query.filter_by(
+            user_id=user_id,
+            file_hash=file_hash,
+            folder_id=folder_id,
+            is_deleted=0
+        ).first()
 
-        return None
+        if same_folder:
+            return {'status': 'exists', 'file': same_folder}
+
+        # 不同文件夹：秒传，复制文件记录
+        from app.extensions import db
+        new_file = File(
+            filename=existing_file.filename,
+            original_name=existing_file.original_name,
+            file_type=existing_file.file_type,
+            file_size=existing_file.file_size,
+            file_path=existing_file.file_path,
+            folder_id=folder_id,
+            user_id=user_id,
+            file_hash=existing_file.file_hash,
+            version=existing_file.version
+        )
+        db.session.add(new_file)
+        db.session.commit()
+
+        return {'status': 'created', 'file': new_file}

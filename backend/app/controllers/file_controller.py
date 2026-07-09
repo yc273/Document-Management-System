@@ -77,8 +77,13 @@ def upload_file():
 
         # 检查重复文件（秒传）
         duplicate = UploadService.handle_duplicate_file(file_hash, current_user.id, folder_id)
-        if duplicate:
-            # 删除临时文件
+        if duplicate['status'] == 'exists':
+            # 同一文件夹内已存在相同文件，拒绝重复上传
+            os.remove(temp_path)
+            return error(message=f'文件夹中已存在相同文件: {duplicate["file"].original_name}', code=400)
+
+        if duplicate['status'] == 'created':
+            # 秒传成功（跨文件夹复制）
             os.remove(temp_path)
 
             # 记录日志
@@ -86,12 +91,12 @@ def upload_file():
                 user_id=current_user.id,
                 action='upload',
                 module='file',
-                description=f'秒传文档: {duplicate.original_name}',
+                description=f'秒传文档: {duplicate["file"].original_name}',
                 ip_address=request.remote_addr
             )
 
             return success({
-                'file': duplicate.to_dict(),
+                'file': duplicate['file'].to_dict(),
                 'duplicate': True
             }, message='文档上传成功（秒传）')
 

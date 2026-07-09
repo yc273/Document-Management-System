@@ -29,8 +29,8 @@ class Config:
     UPLOAD_AVATARS = os.path.join(UPLOAD_FOLDER, 'avatars')      # 头像存储
     UPLOAD_TEMP = os.path.join(UPLOAD_FOLDER, 'temp')           # 临时文件
 
-    # 文件大小限制（100MB）
-    MAX_CONTENT_LENGTH = 100 * 1024 * 1024
+    # 文件大小限制（5GB）
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024 * 1024
 
     # 允许上传的文件类型
     ALLOWED_EXTENSIONS = {
@@ -38,6 +38,10 @@ class Config:
         'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv',
         # 图片类
         'png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp',
+        # 视频类
+        'mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv',
+        # 音频类
+        'mp3', 'wav', 'flac',
         # 压缩包
         'zip', 'rar', '7z',
         # 其他

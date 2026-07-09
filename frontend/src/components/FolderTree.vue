@@ -142,7 +142,7 @@ const loadFolderTree = async () => {
         name: '全部文件',
         isRoot: true,
         children: res.data.folders || [],
-        file_count: 0
+        file_count: res.data.total_files || 0
       }
       // 确保所有节点都有children数组
       const ensureChildrenArray = (nodes) => {
