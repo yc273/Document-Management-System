@@ -49,11 +49,11 @@ class Config:
     }
 
     # ========== 用户存储配置 ==========
-    # 默认存储空间限制（1GB）
-    DEFAULT_STORAGE_LIMIT = 1 * 1024 * 1024 * 1024
+    # 默认存储空间限制（10GB）
+    DEFAULT_STORAGE_LIMIT = 10 * 1024 * 1024 * 1024
 
-    # 管理员存储空间限制（10GB）
-    ADMIN_STORAGE_LIMIT = 10 * 1024 * 1024 * 1024
+    # 管理员存储空间限制（20GB）
+    ADMIN_STORAGE_LIMIT = 20 * 1024 * 1024 * 1024
 
     # ========== Session配置 ==========
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)  # Session有效期7天

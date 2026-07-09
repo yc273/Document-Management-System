@@ -27,7 +27,7 @@ class User(db.Model, UserMixin):
     status = db.Column(db.Integer, nullable=False, default=1, comment='状态：1启用 0禁用')
 
     # ========== 存储字段 ==========
-    storage_limit = db.Column(db.Integer, nullable=False, default=1073741824, comment='存储限制（字节）1GB')
+    storage_limit = db.Column(db.Integer, nullable=False, default=10737418240, comment='存储限制（字节）10GB')
     storage_used = db.Column(db.Integer, nullable=False, default=0, comment='已使用存储（字节）')
 
     # ========== 时间字段 ==========
