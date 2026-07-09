@@ -1,6 +1,7 @@
 """
 文档模型
 """
+import os
 from datetime import datetime
 import hashlib
 
@@ -134,10 +135,26 @@ class File(db.Model):
     def soft_delete(self):
         """
         软删除（移入回收站）
+        如果无其他活跃记录引用同一物理文件，则删除物理文件
         """
         self.is_deleted = 1
         self.deleted_at = datetime.now()
         db.session.commit()
+
+        # 检查是否还有其他未删除的记录引用同一物理文件
+        if self.file_path:
+            other_active = File.query.filter(
+                File.id != self.id,
+                File.file_path == self.file_path,
+                File.is_deleted == 0
+            ).first()
+            if not other_active:
+                # 无其他引用，删除物理文件
+                try:
+                    if os.path.exists(self.file_path):
+                        os.remove(self.file_path)
+                except Exception as e:
+                    print(f"删除物理文件失败: {e}")
 
     def restore(self):
         """
