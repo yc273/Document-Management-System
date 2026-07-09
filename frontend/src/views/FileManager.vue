@@ -47,11 +47,7 @@
                 上传文档
               </el-button>
 
-              <el-button @click="handleNewFolder">
-                <el-icon><FolderAdd /></el-icon>
-                新建文件夹
-              </el-button>
-            </div>
+              </div>
 
             <div class="toolbar-right">
               <!-- 视图切换 -->
@@ -113,6 +109,10 @@
               <el-table-column label="操作" :width="isMobileView ? 300 : 320" :fixed="isMobileView ? false : 'right'" align="center" class-name="operations-col">
                 <template #default="{ row }">
                   <el-button-group>
+                    <el-button type="primary" size="small" link @click="handlePreview(row)">
+                      <el-icon><View /></el-icon>
+                      预览
+                    </el-button>
                     <el-button type="primary" size="small" link @click="handleDownload(row)">
                       <el-icon><Download /></el-icon>
                       下载
@@ -209,6 +209,12 @@
       @success="handleShareSuccess"
     />
 
+    <!-- 预览对话框 -->
+    <FilePreview
+      v-model:visible="previewVisible"
+      :file="previewFile"
+    />
+
     <!-- 上传对话框 -->
     <el-dialog v-model="uploadVisible" title="上传文档" width="500px">
       <el-upload
@@ -262,6 +268,10 @@
         class="context-menu"
         :style="{ left: contextMenuPosition.x + 'px', top: contextMenuPosition.y + 'px' }"
       >
+        <div class="context-menu-item" @click="handlePreview(contextMenuFile)">
+          <el-icon><View /></el-icon>
+          预览
+        </div>
         <div class="context-menu-item" @click="handleDownload(contextMenuFile)">
           <el-icon><Download /></el-icon>
           下载
@@ -291,11 +301,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Upload, FolderAdd, Search, Download, Delete, UploadFilled,
   List, Grid, Edit, Document, Folder, Picture, ArrowLeft,
-  Headset, Files, Share, FolderOpened
+  Headset, Files, Share, FolderOpened, View
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store/user'
 import FolderTree from '@/components/FolderTree.vue'
 import ShareDialog from '@/components/ShareDialog.vue'
+import FilePreview from '@/components/FilePreview.vue'
 
 const userStore = useUserStore()
 
@@ -344,6 +355,10 @@ const contextMenuFile = ref(null)
 const shareDialogVisible = ref(false)
 const selectedFile = ref(null)
 const selectedFiles = ref([])
+
+// 预览功能
+const previewVisible = ref(false)
+const previewFile = ref(null)
 
 // 加载文档列表
 const loadFiles = async () => {
@@ -407,7 +422,16 @@ const goBackToFolders = () => {
 }
 
 // 文件夹刷新
-const handleFolderRefresh = () => {
+const handleFolderRefresh = (resetToRoot) => {
+  if (resetToRoot === 0) {
+    // 文件夹被删除，重置到根目录
+    currentFolder.value = null
+    uploadData.value.folder_id = 0
+    breadcrumbList.value = [{ id: 0, name: '全部文件' }]
+    if (folderTreeRef.value) {
+      folderTreeRef.value.setCurrentKey(0)
+    }
+  }
   loadFiles()
 }
 
@@ -452,6 +476,7 @@ const handleSearch = async () => {
 
 // 上传文档
 const handleUpload = () => {
+  uploadRef.value?.clearFiles()
   uploadVisible.value = true
 }
 
@@ -475,36 +500,42 @@ const handleConfirmUpload = () => {
 const handleUploadSuccess = (response, file) => {
   if (response.code === 200) {
     ElMessage.success(`${file.name} 上传成功`)
-  } else {
-    ElMessage.error(response.message || '上传失败')
-  }
-
-  // 所有文件上传完成后关闭对话框
-  const files = uploadRef.value?.uploadFiles || []
-  const allDone = files.every(f => f.status === 'success')
-  if (allDone) {
     uploadVisible.value = false
     uploading.value = false
     loadFiles()
     folderTreeRef.value?.refresh()
+  } else {
+    ElMessage.error(response.message || '上传失败')
+    uploading.value = false
   }
 }
 
 // 上传失败
-const handleUploadError = () => {
-  ElMessage.error('上传失败')
+const handleUploadError = (err, file) => {
+  // 错误消息在 err.message 中（后端返回的 JSON 字符串）
+  let message = '上传失败'
+  if (err?.message) {
+    try {
+      const data = JSON.parse(err.message)
+      message = data.message || message
+    } catch (e) {
+      // 不是 JSON 格式，直接用原始消息
+      message = err.message || message
+    }
+  }
+  ElMessage.error(message)
   uploading.value = false
-}
-
-// 新建文件夹
-const handleNewFolder = () => {
-  ElMessage.info('请使用左侧文件夹树创建文件夹')
 }
 
 // 文件点击
 const handleFileClick = (file) => {
-  console.log('点击文件:', file)
-  // TODO: 可以添加预览功能
+  handlePreview(file)
+}
+
+// 预览文档
+const handlePreview = (file) => {
+  previewFile.value = file
+  previewVisible.value = true
 }
 
 // 下载文档

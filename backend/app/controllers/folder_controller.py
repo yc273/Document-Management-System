@@ -27,8 +27,18 @@ def get_folder_list():
     # 获取用户的文件夹树
     folder_tree = Folder.get_folder_tree(current_user.id)
 
-    # 获取用户所有文件的总数（用于"全部文件"根节点显示）
-    total_files = File.query.filter_by(user_id=current_user.id, is_deleted=0).count()
+    # 获取用户所有文件的总数（按哈希去重，用于"全部文件"根节点显示）
+    distinct_hashes = db.session.query(File.file_hash).filter(
+        File.user_id == current_user.id,
+        File.is_deleted == 0,
+        File.file_hash.isnot(None)
+    ).distinct().count()
+    null_hash_count = File.query.filter(
+        File.user_id == current_user.id,
+        File.is_deleted == 0,
+        File.file_hash.is_(None)
+    ).count()
+    total_files = distinct_hashes + null_hash_count
 
     return success({
         'folders': folder_tree,

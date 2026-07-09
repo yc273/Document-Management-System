@@ -80,7 +80,7 @@ def upload_file():
         if duplicate['status'] == 'exists':
             # 同一文件夹内已存在相同文件，拒绝重复上传
             os.remove(temp_path)
-            return error(message=f'文件夹中已存在相同文件: {duplicate["file"].original_name}', code=400)
+            return error(message='已有相同文件，请勿重复上传', code=400)
 
         if duplicate['status'] == 'created':
             # 秒传成功（跨文件夹复制）
@@ -419,19 +419,24 @@ def preview_file(file_id):
     file.increment_view()
 
     # 根据文件类型返回
-    if file.file_type in ['image', 'png', 'jpg', 'jpeg', 'gif', 'bmp', 'svg', 'webp']:
+    if file.file_type == 'image':
         # 图片直接返回
         return send_file(file.file_path)
     elif file.file_type == 'pdf':
         # PDF文件
         return send_file(file.file_path, mimetype='application/pdf')
+    elif file.file_type == 'video':
+        # 视频流式播放
+        return send_file(file.file_path, mimetype='video/mp4')
+    elif file.file_type == 'audio':
+        # 音频流式播放
+        return send_file(file.file_path, mimetype='audio/mpeg')
+    elif file.file_type == 'text':
+        # 文本文件以UTF-8返回
+        return send_file(file.file_path, mimetype='text/plain; charset=utf-8')
     else:
-        # 其他文件类型返回下载
-        return send_file(
-            file.file_path,
-            as_attachment=True,
-            download_name=file.original_name
-        )
+        # 其他类型：以原始方式返回但不强制下载，让浏览器自行处理
+        return send_file(file.file_path)
 
 
 @file_bp.route('/search', methods=['POST'])

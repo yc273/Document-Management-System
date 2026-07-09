@@ -219,7 +219,7 @@ const handleDeleteFolder = (folder) => {
       await deleteFolder(folder.id)
       ElMessage.success('删除成功')
       await loadFolderTree()
-      emit('refresh')
+      emit('refresh', 0)
     } catch (error) {
       ElMessage.error('删除失败')
     }

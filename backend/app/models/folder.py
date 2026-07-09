@@ -51,6 +51,22 @@ class Folder(db.Model):
         Returns:
             dict: 文件夹信息
         """
+        from app.models.file import File
+        from app.extensions import db
+        # 按文件哈希去重统计，同一文件夹内相同哈希的文件只算1个
+        distinct_hashes = db.session.query(File.file_hash).filter(
+            File.folder_id == self.id,
+            File.is_deleted == 0,
+            File.file_hash.isnot(None)
+        ).distinct().count()
+        # 无哈希值的文件单独计数（每个算1个）
+        null_hash_count = File.query.filter(
+            File.folder_id == self.id,
+            File.is_deleted == 0,
+            File.file_hash.is_(None)
+        ).count()
+        file_count = distinct_hashes + null_hash_count
+
         data = {
             'id': self.id,
             'name': self.name,
@@ -59,7 +75,7 @@ class Folder(db.Model):
             'path': self.path,
             'level': self.level,
             'sort_order': self.sort_order,
-            'file_count': self.files.count(),
+            'file_count': file_count,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None
         }
@@ -128,13 +144,25 @@ class Folder(db.Model):
 
     def get_file_count(self):
         """
-        获取文件夹下的文档数量（包括子文件夹）
+        获取文件夹下的文档数量（包括子文件夹，按哈希去重）
 
         Returns:
             int: 文档数量
         """
-        # 直接文档数量
-        direct_count = self.files.count()
+        from app.models.file import File
+        from app.extensions import db
+        # 按文件哈希去重统计
+        distinct_hashes = db.session.query(File.file_hash).filter(
+            File.folder_id == self.id,
+            File.is_deleted == 0,
+            File.file_hash.isnot(None)
+        ).distinct().count()
+        null_hash_count = File.query.filter(
+            File.folder_id == self.id,
+            File.is_deleted == 0,
+            File.file_hash.is_(None)
+        ).count()
+        direct_count = distinct_hashes + null_hash_count
 
         # 子文件夹文档数量
         indirect_count = 0
@@ -150,16 +178,13 @@ class Folder(db.Model):
         Returns:
             bool: 是否可以删除
         """
-        # 根目录不能删除
-        if self.parent_id == 0 and self.level == 1:
-            return False
-
         # 有子文件夹不能删除
         if self.children.count() > 0:
             return False
 
-        # 有文档不能删除
-        if self.files.count() > 0:
+        from app.models.file import File
+        # 有未删除的文档不能删除
+        if self.files.filter(File.is_deleted == 0).count() > 0:
             return False
 
         return True

@@ -29,8 +29,18 @@ def get_dashboard():
     获取仪表板数据
     GET /api/stat/dashboard
     """
-    # 文档统计
-    total_files = File.query.filter_by(user_id=current_user.id, is_deleted=0).count()
+    # 文档统计（按哈希去重）
+    distinct_hashes = db.session.query(File.file_hash).filter(
+        File.user_id == current_user.id,
+        File.is_deleted == 0,
+        File.file_hash.isnot(None)
+    ).distinct().count()
+    null_hash_count = File.query.filter(
+        File.user_id == current_user.id,
+        File.is_deleted == 0,
+        File.file_hash.is_(None)
+    ).count()
+    total_files = distinct_hashes + null_hash_count
     total_folders = Folder.query.filter_by(user_id=current_user.id).count()
     total_tags = Tag.query.filter_by(user_id=current_user.id).count()
     total_shares = Share.query.filter_by(created_by=current_user.id).count()
