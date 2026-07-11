@@ -1,1 +1,0 @@
-import{a as t}from"./index-f432e221.js";function e(){return t({url:"/stat/dashboard",method:"get"})}function o(){return t({url:"/stat/storage",method:"get"})}function s(a=7){return t({url:"/stat/upload",method:"get",params:{days:a}})}function u(a=7){return t({url:"/stat/log",method:"get",params:{days:a}})}export{o as a,s as b,u as c,e as g};

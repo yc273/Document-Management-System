@@ -51,9 +51,9 @@ instance/
 logs/
 *.log
 
-# Uploads (可选：如果不想上传文件)
-# uploads/*
-# !uploads/.gitkeep
+# Uploads（运行时用户上传的文件，不应纳入版本控制）
+backend/uploads/*
+!backend/uploads/.gitkeep
 
 # Node
 node_modules/
@@ -66,6 +66,10 @@ yarn.lock
 # Frontend Build
 frontend/dist/
 frontend/.vite/
+backend/static/
+
+# ZCode 工具目录
+.zcode/
 
 # OS
 .DS_Store
