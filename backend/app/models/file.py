@@ -24,7 +24,7 @@ class File(db.Model):
     file_hash = db.Column(db.String(64), nullable=True, index=True, comment='文件哈希值')
 
     # ========== 归属字段 ==========
-    folder_id = db.Column(db.Integer, db.ForeignKey('doc_folder.id'), nullable=True, default=0, index=True, comment='所属文件夹ID')
+    folder_id = db.Column(db.Integer, db.ForeignKey('doc_folder.id'), nullable=False, default=0, index=True, comment='所属文件夹ID（0为根目录）')
     user_id = db.Column(db.Integer, db.ForeignKey('sys_user.id'), nullable=False, index=True, comment='上传用户')
 
     # ========== 版本字段 ==========
@@ -60,7 +60,7 @@ class File(db.Model):
         Returns:
             dict: 文档信息
         """
-        return {
+        data = {
             'id': self.id,
             'filename': self.filename,
             'original_name': self.original_name,
@@ -78,6 +78,21 @@ class File(db.Model):
             'updated_at': self.updated_at.strftime('%Y-%m-%d %H:%M:%S') if self.updated_at else None,
             'tags': [tag.to_dict() for tag in self.tags]
         }
+
+        # 已删除文件附加：删除时间、剩余保留天数
+        if self.is_deleted == 1:
+            from config import Config
+            retention_days = Config.TRASH_RETENTION_DAYS
+            data['deleted_at'] = self.deleted_at.strftime('%Y-%m-%d %H:%M:%S') if self.deleted_at else None
+            if self.deleted_at:
+                # 剩余保留天数（不足1天按1天算，已过期为0）
+                elapsed = (datetime.now() - self.deleted_at).total_seconds() / 86400
+                remaining = int(retention_days - elapsed)
+                data['expire_days'] = max(remaining, 0)
+            else:
+                data['expire_days'] = retention_days
+
+        return data
 
     def get_readable_size(self):
         """
@@ -135,26 +150,12 @@ class File(db.Model):
     def soft_delete(self):
         """
         软删除（移入回收站）
-        如果无其他活跃记录引用同一物理文件，则删除物理文件
+        仅标记数据库记录为已删除，保留物理文件，以便恢复。
+        物理文件在永久删除（permanently_delete）时才真正清除。
         """
         self.is_deleted = 1
         self.deleted_at = datetime.now()
         db.session.commit()
-
-        # 检查是否还有其他未删除的记录引用同一物理文件
-        if self.file_path:
-            other_active = File.query.filter(
-                File.id != self.id,
-                File.file_path == self.file_path,
-                File.is_deleted == 0
-            ).first()
-            if not other_active:
-                # 无其他引用，删除物理文件
-                try:
-                    if os.path.exists(self.file_path):
-                        os.remove(self.file_path)
-                except Exception as e:
-                    print(f"删除物理文件失败: {e}")
 
     def restore(self):
         """
@@ -191,7 +192,7 @@ class File(db.Model):
             db.session.commit()
 
     @staticmethod
-    def create_file(filename, original_name, file_type, file_size, file_path, user_id, folder_id=0):
+    def create_file(filename, original_name, file_type, file_size, file_path, user_id, folder_id=0, file_hash=None):
         """
         创建文档
 
@@ -203,6 +204,7 @@ class File(db.Model):
             file_path: 文件路径
             user_id: 用户ID
             folder_id: 文件夹ID
+            file_hash: 文件哈希值（可选，不传则自动计算）
 
         Returns:
             File: 文档实例
@@ -214,14 +216,16 @@ class File(db.Model):
             file_size=file_size,
             file_path=file_path,
             user_id=user_id,
-            folder_id=folder_id
+            folder_id=folder_id,
+            file_hash=file_hash
         )
 
         db.session.add(file)
         db.session.commit()
 
-        # 计算文件哈希
-        file.calculate_hash()
+        # 若未传入 hash 则计算
+        if not file_hash:
+            file.calculate_hash()
 
         # 更新用户存储使用量
         from app.models.user import User

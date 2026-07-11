@@ -40,8 +40,7 @@ backend/
 - **Flask-SQLAlchemy** - ORM
 - **Flask-Login** - 用户认证
 - **Flask-CORS** - 跨域支持
-- **PyMySQL** - MySQL驱动
-- **MySQL 5.7+** - 数据库
+- **SQLite 3** - 数据库（单文件、零配置，无需额外安装）
 
 ## 📦 安装步骤
 
@@ -52,23 +51,17 @@ cd backend
 pip install -r requirements.txt
 ```
 
-### 2. 配置MySQL数据库
+### 2. 数据库配置（SQLite，无需额外安装）
 
-创建数据库：
+本项目使用 SQLite，数据库文件 `doc_management.db` 会自动创建在 `backend/` 目录下，无需手动建库或安装数据库服务。
 
-```sql
-CREATE DATABASE doc_management DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-修改 `app/config.py` 中的数据库配置：
+默认连接配置见 `config.py`：
 
 ```python
-MYSQL_HOST = 'localhost'
-MYSQL_PORT = 3306
-MYSQL_USER = 'root'
-MYSQL_PASSWORD = 'your_password'
-MYSQL_DB = 'doc_management'
+SQLALCHEMY_DATABASE_URI = f'sqlite:///{db_path}'  # 指向 backend/doc_management.db
 ```
+
+如需更换数据库文件位置，修改 `config.py` 中的 `db_path` 即可。
 
 ### 3. 初始化数据库
 
@@ -76,11 +69,7 @@ MYSQL_DB = 'doc_management'
 python db_init.py init
 ```
 
-或使用SQL脚本：
-
-```bash
-mysql -u root -p doc_management < ../scripts/init_db.sql
-```
+该命令会自动建表并写入默认账号。建表 SQL 也可参考 `scripts/init_db.sql`。
 
 ### 4. 启动应用
 
@@ -169,7 +158,6 @@ app = create_app('production')
 
 ```bash
 export SECRET_KEY='your-secret-key'
-export MYSQL_PASSWORD='your-password'
 ```
 
 ## 🔐 局域网访问配置
@@ -225,9 +213,9 @@ python db_init.py reset
 2. **设置SECRET_KEY**
    - 生产环境必须设置随机的SECRET_KEY
 
-3. **数据库密码**
-   - 使用强密码
-   - 不要在代码中硬编码
+3. **数据库文件**
+   - SQLite 文件即数据，请定期备份 `doc_management.db`
+   - 生产环境建议将数据库文件存放于受保护目录
 
 4. **文件上传限制**
    - 已在config.py中配置文件大小限制（100MB）
@@ -254,17 +242,13 @@ debug = True  # 显示详细错误信息
 
 ## 📞 常见问题
 
-### 1. 数据库连接失败
+### 1. 数据库相关
 
-检查MySQL是否启动：
+SQLite 无需启动数据库服务，常见问题：
 
-```bash
-# Windows
-net start mysql
-
-# Mac/Linux
-sudo service mysql start
-```
+- 数据库文件缺失：首次运行 `python db_init.py init` 自动创建 `doc_management.db`
+- 权限不足：确保 `backend/` 目录可写
+- 数据损坏（极少见）：删除 `doc_management.db` 后重新执行初始化
 
 ### 2. 端口被占用
 

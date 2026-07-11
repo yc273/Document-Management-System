@@ -34,21 +34,13 @@ def create_app(config_name='development'):
     # 初始化扩展插件
     init_extensions(app)
 
-    # 配置CORS（跨域资源共享）- 支持局域网访问和凭证
-    # 在开发环境中，为了方便测试，我们允许特定的本地和局域网地址
+    # 配置CORS（跨域资源共享）- 允许所有来源访问，便于局域网多设备访问
+    # 说明：supports_credentials=True 时，Flask-CORS 不会发送通配符 "*"，
+    # 而是回显请求方的 Origin，从而兼容 Cookie/Session 跨域登录。
+    # 这样无论设备连接哪个 WiFi 网段，只要能访问到本机服务即可正常登录使用。
     CORS(app, resources={
         r"/api/*": {
-            "origins": [
-                "http://localhost:5173",
-                "http://localhost:5174",
-                "http://127.0.0.1:5173",
-                "http://127.0.0.1:5174",
-                # 支持两个网络接口的所有端口
-                "http://192.168.1.102:5173",
-                "http://192.168.1.102:5174",
-                "http://192.168.50.236:5173",
-                "http://192.168.50.236:5174"
-            ],
+            "origins": "*",
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             "allow_headers": ["Content-Type", "Authorization"],
             "supports_credentials": True

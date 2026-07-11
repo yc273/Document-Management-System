@@ -26,6 +26,41 @@ export function uploadFile(file, folderId = 0) {
 }
 
 /**
+ * 分片上传 - 检查（秒传/断点续传）
+ */
+export function checkUpload(data) {
+  return request({
+    url: '/file/upload/check',
+    method: 'post',
+    data
+  })
+}
+
+/**
+ * 分片上传 - 上传单个分片
+ */
+export function uploadChunk(formData, onProgress) {
+  return request({
+    url: '/file/upload/chunk',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: onProgress
+  })
+}
+
+/**
+ * 分片上传 - 合并分片
+ */
+export function mergeUpload(data) {
+  return request({
+    url: '/file/upload/merge',
+    method: 'post',
+    data
+  })
+}
+
+/**
  * 获取文档列表
  */
 export function getFileList(params) {
@@ -111,5 +146,18 @@ export function batchDeleteFile(data) {
     url: '/file/batch-delete',
     method: 'post',
     data
+  })
+}
+
+/**
+ * 批量下载文档（打包为ZIP）
+ * 注意：返回的是二进制流，不走统一的JSON响应拦截器
+ */
+export function batchDownloadFile(data) {
+  return request({
+    url: '/file/batch-download',
+    method: 'post',
+    data,
+    responseType: 'blob'
   })
 }

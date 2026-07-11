@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 from app.extensions import db
 from app.models.folder import Folder
 from app.models.file import File
+from app.models.log import Log
 from app.utils.decorators import login_required_json, active_required
 from app.utils.response import success, error, bad_request, not_found
 from app.utils.decorators import check_folder_permission
@@ -27,18 +28,11 @@ def get_folder_list():
     # 获取用户的文件夹树
     folder_tree = Folder.get_folder_tree(current_user.id)
 
-    # 获取用户所有文件的总数（按哈希去重，用于"全部文件"根节点显示）
-    distinct_hashes = db.session.query(File.file_hash).filter(
+    # 获取用户所有未删除文件的总数（按记录数统计，不去重）
+    total_files = File.query.filter(
         File.user_id == current_user.id,
-        File.is_deleted == 0,
-        File.file_hash.isnot(None)
-    ).distinct().count()
-    null_hash_count = File.query.filter(
-        File.user_id == current_user.id,
-        File.is_deleted == 0,
-        File.file_hash.is_(None)
+        File.is_deleted == 0
     ).count()
-    total_files = distinct_hashes + null_hash_count
 
     return success({
         'folders': folder_tree,
@@ -85,11 +79,12 @@ def create_folder():
         if parent.user_id != current_user.id:
             return bad_request('只能在当前用户目录下创建文件夹')
 
-    # 检查同级文件夹是否已存在同名
+    # 检查同级文件夹是否已存在同名（仅未删除的）
     existing = Folder.query.filter_by(
         user_id=current_user.id,
         parent_id=parent_id,
-        name=name
+        name=name,
+        is_deleted=0
     ).first()
 
     if existing:
@@ -179,8 +174,10 @@ def update_folder(folder_id):
 @active_required
 def delete_folder(folder_id):
     """
-    删除文件夹
+    删除文件夹（级联软删除，移入回收站）
     DELETE /api/folder/<folder_id>
+
+    会同时软删除文件夹下的所有子文件夹和文件，可在回收站整体恢复。
     """
     folder = Folder.query.get_or_404(folder_id)
 
@@ -188,14 +185,23 @@ def delete_folder(folder_id):
     if folder.user_id != current_user.id and not current_user.is_admin():
         return error(message='没有权限删除该文件夹', code=403)
 
-    # 检查是否可以删除
-    if not folder.can_delete():
-        return bad_request('文件夹不为空，无法删除')
+    # 已在回收站中则不允许重复删除
+    if folder.is_deleted == 1:
+        return bad_request('该文件夹已在回收站中')
 
-    db.session.delete(folder)
-    db.session.commit()
+    # 级联软删除（文件夹 + 子孙文件夹 + 内部文件）
+    folder.soft_delete()
 
-    return success(message='文件夹删除成功')
+    # 记录日志
+    Log.create_log(
+        user_id=current_user.id,
+        action='delete',
+        module='folder',
+        description=f'删除文件夹（移入回收站）: {folder.name}',
+        ip_address=request.remote_addr
+    )
+
+    return success(message='文件夹已移入回收站')
 
 
 @folder_bp.route('/move', methods=['POST'])

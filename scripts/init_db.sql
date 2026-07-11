@@ -40,10 +40,13 @@ CREATE TABLE doc_folder (
     path VARCHAR(500) COMMENT '完整路径',
     level INT DEFAULT 1 COMMENT '层级',
     sort_order INT DEFAULT 0 COMMENT '排序',
+    is_deleted TINYINT NOT NULL DEFAULT 0 COMMENT '是否删除：1是 0否',
+    deleted_at DATETIME DEFAULT NULL COMMENT '删除时间',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (user_id) REFERENCES sys_user(id) ON DELETE CASCADE,
-    INDEX idx_user_parent (user_id, parent_id)
+    INDEX idx_user_parent (user_id, parent_id),
+    INDEX idx_deleted (is_deleted)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文件夹表';
 
 -- ========================================

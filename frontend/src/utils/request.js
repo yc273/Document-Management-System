@@ -31,6 +31,11 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   response => {
+    // 二进制流响应（如文件下载）直接返回，不做JSON解析
+    if (response.config.responseType === 'blob') {
+      return response
+    }
+
     const res = response.data
 
     // 如果响应码不是200，显示错误信息

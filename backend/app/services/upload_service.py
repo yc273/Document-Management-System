@@ -212,3 +212,97 @@ class UploadService:
         db.session.commit()
 
         return {'status': 'created', 'file': new_file}
+
+    @staticmethod
+    def merge_chunks(file_hash, original_filename, total_size, user_id, folder_id=0):
+        """
+        合并分片上传的文件，完成最终存储和数据库记录创建。
+
+        Args:
+            file_hash: 文件唯一标识（分片目录名）
+            original_filename: 原始文件名
+            total_size: 文件总大小（字节）
+            user_id: 用户ID
+            folder_id: 目标文件夹ID
+
+        Returns:
+            dict: {'status': 'success'|'exists'|'created', 'file': File}
+        """
+        upload_temp = current_app.config['UPLOAD_TEMP']
+        chunk_dir = os.path.join(upload_temp, file_hash)
+
+        if not os.path.exists(chunk_dir):
+            return {'status': 'error', 'message': '分片数据不存在'}
+
+        # 检查存储空间
+        is_enough, storage_info = UploadService.check_storage_limit(user_id, total_size)
+        if not is_enough:
+            return {'status': 'error', 'message': '存储空间不足'}
+
+        # 1. 秒传检测：若用户已有同 hash 文件
+        dup = UploadService.handle_duplicate_file(file_hash, user_id, folder_id)
+        if dup['status'] in ('exists', 'created'):
+            # 清理临时分片
+            UploadService.cleanup_chunks(file_hash)
+            return {'status': dup['status'], 'file': dup['file']}
+
+        # 2. 合并分片到最终文件
+        filename = generate_filename(original_filename, user_id)
+        upload_folder = current_app.config['UPLOAD_DOCUMENTS']
+        final_path = os.path.join(upload_folder, filename)
+
+        # 按分片序号顺序合并
+        chunk_files = [f for f in os.listdir(chunk_dir) if f.startswith('chunk_')]
+        # 提取序号排序
+        chunk_files.sort(key=lambda x: int(x.split('_')[1]))
+
+        with open(final_path, 'wb') as fout:
+            for chunk_name in chunk_files:
+                chunk_path = os.path.join(chunk_dir, chunk_name)
+                with open(chunk_path, 'rb') as fin:
+                    while True:
+                        data = fin.read(1024 * 1024)  # 1MB 缓冲
+                        if not data:
+                            break
+                        fout.write(data)
+
+        # 3. 校验合并后大小
+        actual_size = os.path.getsize(final_path)
+        if actual_size != total_size:
+            # 大小不符，删除合并文件
+            os.remove(final_path)
+            UploadService.cleanup_chunks(file_hash)
+            return {'status': 'error', 'message': f'文件大小校验失败（期望{total_size}，实际{actual_size}）'}
+
+        # 4. 创建数据库记录（传入已知的 hash，避免重算）
+        file_type = get_file_type(original_filename)
+        from app.models.file import File
+        file = File.create_file(
+            filename=filename,
+            original_name=original_filename,
+            file_type=file_type,
+            file_size=actual_size,
+            file_path=final_path,
+            user_id=user_id,
+            folder_id=folder_id,
+            file_hash=file_hash
+        )
+
+        # 5. 清理临时分片
+        UploadService.cleanup_chunks(file_hash)
+
+        return {'status': 'success', 'file': file}
+
+    @staticmethod
+    def cleanup_chunks(file_hash):
+        """
+        清理指定文件的临时分片目录。
+        """
+        import shutil
+        upload_temp = current_app.config['UPLOAD_TEMP']
+        chunk_dir = os.path.join(upload_temp, file_hash)
+        try:
+            if os.path.exists(chunk_dir):
+                shutil.rmtree(chunk_dir)
+        except Exception as e:
+            print(f"清理分片失败: {e}")

@@ -175,6 +175,10 @@
                 <el-icon><Share /></el-icon>
                 批量分享
               </el-button>
+              <el-button type="primary" size="small" :loading="batchDownloading" @click="handleBatchDownload">
+                <el-icon><Download /></el-icon>
+                批量下载
+              </el-button>
               <el-button type="info" size="small" @click="handleBatchMove">
                 <el-icon><FolderOpened /></el-icon>
                 移动
@@ -216,16 +220,13 @@
     />
 
     <!-- 上传对话框 -->
-    <el-dialog v-model="uploadVisible" title="上传文档" width="500px">
+    <el-dialog v-model="uploadVisible" title="上传文档" width="560px" @close="handleUploadClose">
       <el-upload
         ref="uploadRef"
-        :action="uploadAction"
-        :headers="uploadHeaders"
-        :data="uploadData"
-        :on-success="handleUploadSuccess"
-        :on-error="handleUploadError"
-        :before-upload="beforeUpload"
         :auto-upload="false"
+        :on-change="handleFileChange"
+        :on-remove="handleFileRemove"
+        :file-list="uploadFileList"
         drag
         multiple
       >
@@ -235,15 +236,28 @@
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            支持多种文件格式，单个文件不超过100MB
+            支持多种文件格式。小于 20MB 走普通上传，大于 20MB 自动分片上传（支持断点续传）
           </div>
         </template>
       </el-upload>
 
+      <!-- 上传进度区 -->
+      <div v-if="uploadProgressList.length > 0" class="upload-progress-area">
+        <div v-for="(item, idx) in uploadProgressList" :key="idx" class="upload-progress-item">
+          <div class="upload-progress-name">
+            <span>{{ item.name }}</span>
+            <el-tag size="small" :type="item.status === 'done' ? 'success' : (item.status === 'error' ? 'danger' : 'info')">
+              {{ item.statusText }}
+            </el-tag>
+          </div>
+          <el-progress :percentage="item.percent" :status="item.status === 'done' ? 'success' : (item.status === 'error' ? 'exception' : '')" />
+        </div>
+      </div>
+
       <template #footer>
         <el-button @click="uploadVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleConfirmUpload" :loading="uploading">
-          确定上传
+        <el-button type="primary" @click="handleConfirmUpload" :loading="uploading" :disabled="uploadFileList.length === 0">
+          开始上传
         </el-button>
       </template>
     </el-dialog>
@@ -258,6 +272,32 @@
       <template #footer>
         <el-button @click="renameVisible = false">取消</el-button>
         <el-button type="primary" @click="handleConfirmRename">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 移动文件对话框 -->
+    <el-dialog v-model="moveVisible" title="移动到文件夹" width="450px">
+      <p class="move-tip">将选中的 {{ moveForm.fileCount }} 个文件移动到：</p>
+      <el-tree-select
+        v-model="moveForm.targetFolderId"
+        :data="moveFolderTreeData"
+        :props="{ label: 'name', value: 'id', children: 'children' }"
+        :render-after-expand="false"
+        check-strictly
+        node-key="id"
+        placeholder="选择目标文件夹"
+        style="width: 100%"
+      >
+        <template #default="{ data }">
+          <span>
+            <el-icon style="vertical-align: middle;"><Folder /></el-icon>
+            {{ data.name }}
+          </span>
+        </template>
+      </el-tree-select>
+      <template #footer>
+        <el-button @click="moveVisible = false">取消</el-button>
+        <el-button type="primary" :loading="moving" @click="handleConfirmMove">确定移动</el-button>
       </template>
     </el-dialog>
 
@@ -295,8 +335,9 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
-import { getFileList, deleteFile, downloadFile, updateFile, moveFile, batchDeleteFile } from '@/api/file'
-import { getBreadcrumb } from '@/api/folder'
+import { getFileList, deleteFile, downloadFile, updateFile, moveFile, batchDeleteFile, batchDownloadFile, uploadChunk, checkUpload, mergeUpload } from '@/api/file'
+import { getBreadcrumb, getFolderList } from '@/api/folder'
+import request from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Upload, FolderAdd, Search, Download, Delete, UploadFilled,
@@ -322,13 +363,18 @@ const total = ref(0)
 const uploadVisible = ref(false)
 const uploadRef = ref(null)
 const uploading = ref(false)
-const uploadAction = '/api/file/upload'
-const uploadHeaders = computed(() => ({
-  'Authorization': userStore.token ? `Bearer ${userStore.token}` : ''
-}))
 const uploadData = ref({
   folder_id: 0
 })
+// 待上传文件列表（el-upload file-list）
+const uploadFileList = ref([])
+// 每个文件的上传进度
+const uploadProgressList = ref([])
+
+// 分片上传配置
+const CHUNK_SIZE = 5 * 1024 * 1024      // 每片 5MB
+const CHUNK_THRESHOLD = 20 * 1024 * 1024 // 超过 20MB 走分片上传
+const CHUNK_CONCURRENCY = 3              // 分片并发数
 
 // 文件夹相关
 const folderTreeRef = ref(null)
@@ -356,6 +402,19 @@ const shareDialogVisible = ref(false)
 const selectedFile = ref(null)
 const selectedFiles = ref([])
 
+// 批量下载状态
+const batchDownloading = ref(false)
+
+// 移动文件
+const moveVisible = ref(false)
+const moving = ref(false)
+const moveForm = ref({
+  fileIds: [],
+  fileCount: 0,
+  targetFolderId: null
+})
+const moveFolderTreeData = ref([])
+
 // 预览功能
 const previewVisible = ref(false)
 const previewFile = ref(null)
@@ -367,7 +426,8 @@ const loadFiles = async () => {
     const res = await getFileList({
       page: currentPage.value,
       per_page: pageSize.value,
-      folder_id: uploadData.value.folder_id
+      folder_id: uploadData.value.folder_id,
+      keyword: searchKeyword.value.trim()
     })
     if (res.code === 200) {
       fileList.value = res.data.files || []
@@ -408,6 +468,8 @@ const handleFolderSelect = (folder) => {
   currentFolder.value = folder
   uploadData.value.folder_id = folder.id || 0
   currentPage.value = 1
+  // 切换文件夹时清空搜索，避免残留关键词影响新文件夹列表
+  searchKeyword.value = ''
   loadFiles()
   loadBreadcrumb(folder.id || 0)
   // 移动端选择文件夹后自动隐藏文件夹树，让文件列表占满全屏
@@ -457,6 +519,7 @@ const handleSearch = async () => {
   loading.value = true
   try {
     const res = await getFileList({
+      folder_id: uploadData.value.folder_id,
       keyword: searchKeyword.value,
       page: 1,
       per_page: pageSize.value
@@ -480,51 +543,184 @@ const handleUpload = () => {
   uploadVisible.value = true
 }
 
-// 上传前校验
-const beforeUpload = (file) => {
-  const maxSize = 100 * 1024 * 1024 // 100MB
-  if (file.size > maxSize) {
-    ElMessage.error('文件大小不能超过100MB')
-    return false
-  }
-  return true
+// el-upload 文件选择变化（手动管理模式）
+const handleFileChange = (file, fileList) => {
+  uploadFileList.value = fileList
 }
 
-// 确认上传
-const handleConfirmUpload = () => {
+// el-upload 移除文件
+const handleFileRemove = (file, fileList) => {
+  uploadFileList.value = fileList
+}
+
+// 上传对话框关闭时清理
+const handleUploadClose = () => {
+  uploadFileList.value = []
+  uploadProgressList.value = []
+  uploadRef.value?.clearFiles()
+}
+
+// 计算文件 MD5（使用 FileReader + spark-md5 不可用时，用简易 hash 替代：文件名+大小+修改时间）
+// 注：为避免引入额外依赖，用 size+name+lastModified 生成标识。生产可用 spark-md5 替换。
+const calcFileHash = async (file) => {
+  const info = `${file.name}_${file.size}_${file.lastModified}`
+  // 简单字符串 hash → 作为分片目录标识
+  let hash = 0
+  for (let i = 0; i < info.length; i++) {
+    const ch = info.charCodeAt(i)
+    hash = ((hash << 5) - hash) + ch
+    hash |= 0
+  }
+  return 'h' + Math.abs(hash).toString(16) + file.size.toString(16)
+}
+
+// 确认上传：逐个文件处理
+const handleConfirmUpload = async () => {
+  if (uploadFileList.value.length === 0) {
+    ElMessage.warning('请先选择文件')
+    return
+  }
   uploading.value = true
-  uploadRef.value?.submit()
-}
+  // 初始化进度列表
+  uploadProgressList.value = uploadFileList.value.map(f => ({
+    name: f.name,
+    percent: 0,
+    status: 'uploading',
+    statusText: '等待中'
+  }))
 
-// 上传成功
-const handleUploadSuccess = (response, file) => {
-  if (response.code === 200) {
-    ElMessage.success(`${file.name} 上传成功`)
-    uploadVisible.value = false
-    uploading.value = false
-    loadFiles()
-    folderTreeRef.value?.refresh()
-  } else {
-    ElMessage.error(response.message || '上传失败')
-    uploading.value = false
-  }
-}
-
-// 上传失败
-const handleUploadError = (err, file) => {
-  // 错误消息在 err.message 中（后端返回的 JSON 字符串）
-  let message = '上传失败'
-  if (err?.message) {
+  let successCount = 0
+  for (let i = 0; i < uploadFileList.value.length; i++) {
+    const rawFile = uploadFileList.value[i].raw
     try {
-      const data = JSON.parse(err.message)
-      message = data.message || message
-    } catch (e) {
-      // 不是 JSON 格式，直接用原始消息
-      message = err.message || message
+      if (rawFile.size >= CHUNK_THRESHOLD) {
+        await uploadInChunks(rawFile, i)
+      } else {
+        await uploadSingle(rawFile, i)
+      }
+      successCount++
+    } catch (err) {
+      console.error(`上传 ${rawFile.name} 失败:`, err)
+      uploadProgressList.value[i].status = 'error'
+      uploadProgressList.value[i].statusText = '失败'
     }
   }
-  ElMessage.error(message)
+
   uploading.value = false
+  if (successCount > 0) {
+    ElMessage.success(`上传完成，成功 ${successCount} 个文件`)
+    loadFiles()
+    folderTreeRef.value?.refresh()
+  }
+  // 全部成功则关闭对话框
+  if (successCount === uploadFileList.value.length) {
+    uploadVisible.value = false
+    handleUploadClose()
+  }
+}
+
+// 普通单次上传（< 20MB）
+const uploadSingle = async (file, progressIndex) => {
+  uploadProgressList.value[progressIndex].statusText = '上传中...'
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('folder_id', uploadData.value.folder_id)
+
+  await request({
+    url: '/file/upload',
+    method: 'post',
+    data: formData,
+    headers: { 'Content-Type': 'multipart/form-data' },
+    withCredentials: true,
+    onUploadProgress: (e) => {
+      if (e.total) {
+        uploadProgressList.value[progressIndex].percent = Math.floor(e.loaded * 100 / e.total)
+      }
+    }
+  })
+  uploadProgressList.value[progressIndex].percent = 100
+  uploadProgressList.value[progressIndex].status = 'done'
+  uploadProgressList.value[progressIndex].statusText = '完成'
+}
+
+// 分片上传（>= 20MB）
+const uploadInChunks = async (file, progressIndex) => {
+  const fileHash = await calcFileHash(file)
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
+
+  // 更新状态文本
+  uploadProgressList.value[progressIndex].statusText = '检查中...'
+
+  // 1. check：秒传 / 断点续传 / 全新
+  const checkRes = await checkUpload({
+    file_hash: fileHash,
+    file_size: file.size,
+    filename: file.name,
+    folder_id: uploadData.value.folder_id
+  })
+
+  if (checkRes.data.status === 'skip') {
+    // 秒传成功
+    uploadProgressList.value[progressIndex].percent = 100
+    uploadProgressList.value[progressIndex].status = 'done'
+    uploadProgressList.value[progressIndex].statusText = '秒传完成'
+    return
+  }
+
+  // 确定需要上传的分片序号
+  let chunksToUpload = []
+  for (let i = 0; i < totalChunks; i++) chunksToUpload.push(i)
+  if (checkRes.data.status === 'resume') {
+    const uploaded = new Set(checkRes.data.uploaded_chunks || [])
+    chunksToUpload = chunksToUpload.filter(i => !uploaded.has(i))
+  }
+
+  uploadProgressList.value[progressIndex].statusText = `分片上传 0/${chunksToUpload.length}`
+
+  // 2. 并发上传分片
+  let completedCount = 0
+  const totalToUpload = chunksToUpload.length
+  let cursor = 0
+
+  const uploadOneChunk = async () => {
+    while (cursor < chunksToUpload.length) {
+      const chunkIndex = chunksToUpload[cursor++]
+      const start = chunkIndex * CHUNK_SIZE
+      const end = Math.min(start + CHUNK_SIZE, file.size)
+      const blob = file.slice(start, end)
+
+      const formData = new FormData()
+      formData.append('file', blob)
+      formData.append('file_hash', fileHash)
+      formData.append('chunk_index', chunkIndex)
+      formData.append('total_chunks', totalChunks)
+
+      await uploadChunk(formData)
+      completedCount++
+      const pct = Math.floor(completedCount * 100 / totalToUpload)
+      uploadProgressList.value[progressIndex].percent = pct
+      uploadProgressList.value[progressIndex].statusText = `分片上传 ${completedCount}/${totalToUpload}`
+    }
+  }
+
+  // 启动并发
+  const workers = []
+  for (let i = 0; i < CHUNK_CONCURRENCY; i++) {
+    workers.push(uploadOneChunk())
+  }
+  await Promise.all(workers)
+
+  // 3. merge
+  uploadProgressList.value[progressIndex].statusText = '合并中...'
+  await mergeUpload({
+    file_hash: fileHash,
+    filename: file.name,
+    file_size: file.size,
+    folder_id: uploadData.value.folder_id
+  })
+  uploadProgressList.value[progressIndex].percent = 100
+  uploadProgressList.value[progressIndex].status = 'done'
+  uploadProgressList.value[progressIndex].statusText = '完成'
 }
 
 // 文件点击
@@ -543,6 +739,44 @@ const handleDownload = (file) => {
   const url = downloadFile(file.id)
   window.open(url, '_blank')
   closeContextMenu()
+}
+
+// 批量下载（打包为ZIP）
+const handleBatchDownload = async () => {
+  if (selectedFiles.value.length === 0) {
+    ElMessage.warning('请先选择要下载的文件')
+    return
+  }
+
+  batchDownloading.value = true
+  try {
+    const fileIds = selectedFiles.value.map(f => f.id)
+    const response = await batchDownloadFile({ file_ids: fileIds })
+    // 从响应头获取文件名，没有则用默认名
+    const disposition = response.headers['content-disposition'] || ''
+    const match = disposition.match(/filename\*?=(?:UTF-8'')?(.*)$/i)
+    let fileName = '批量下载.zip'
+    if (match && match[1]) {
+      fileName = decodeURIComponent(match[1].replace(/['"]/g, ''))
+    }
+    // 创建下载链接
+    const blob = new Blob([response.data], { type: 'application/zip' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success(`已打包下载 ${selectedFiles.value.length} 个文件`)
+    selectedFiles.value = []
+  } catch (error) {
+    console.error('批量下载失败:', error)
+    ElMessage.error('批量下载失败')
+  } finally {
+    batchDownloading.value = false
+  }
 }
 
 // 重命名
@@ -624,13 +858,63 @@ const handleBatchShare = () => {
 }
 
 // 批量移动
-const handleBatchMove = () => {
+// 移动文件
+const handleBatchMove = async () => {
   if (selectedFiles.value.length === 0) {
     ElMessage.warning('请先选择要移动的文件')
     return
   }
-  ElMessage.info('请使用右侧文件夹树选择目标文件夹')
-  // TODO: 实现移动功能
+
+  // 加载文件夹树（用于选择目标位置）
+  try {
+    const res = await getFolderList()
+    if (res.code === 200) {
+      moveFolderTreeData.value = res.data.folders || []
+    }
+  } catch (e) {
+    console.error('加载文件夹失败:', e)
+    ElMessage.error('加载文件夹列表失败')
+    return
+  }
+
+  // 没有任何文件夹时无法移动
+  if (moveFolderTreeData.value.length === 0) {
+    ElMessage.warning('当前没有可用的文件夹，请先创建文件夹')
+    return
+  }
+
+  moveForm.value = {
+    fileIds: selectedFiles.value.map(f => f.id),
+    fileCount: selectedFiles.value.length,
+    targetFolderId: null
+  }
+  moveVisible.value = true
+}
+
+// 确认移动
+const handleConfirmMove = async () => {
+  if (moveForm.value.targetFolderId === null) {
+    ElMessage.warning('请选择目标文件夹')
+    return
+  }
+  moving.value = true
+  try {
+    const res = await moveFile({
+      file_ids: moveForm.value.fileIds,
+      target_folder_id: moveForm.value.targetFolderId
+    })
+    if (res.code === 200) {
+      ElMessage.success(`成功移动 ${moveForm.value.fileCount} 个文件`)
+      moveVisible.value = false
+      selectedFiles.value = []
+      await loadFiles()
+      folderTreeRef.value?.refresh()
+    }
+  } catch (error) {
+    console.error('移动失败:', error)
+  } finally {
+    moving.value = false
+  }
 }
 
 // 批量删除
@@ -1136,5 +1420,39 @@ onUnmounted(() => {
   .toolbar-left {
     flex-direction: column;
   }
+}
+
+/* 移动提示 */
+.move-tip {
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #606266;
+}
+
+/* 上传进度区 */
+.upload-progress-area {
+  margin-top: 15px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.upload-progress-item {
+  margin-bottom: 12px;
+}
+
+.upload-progress-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.upload-progress-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
 }
 </style>

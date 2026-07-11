@@ -67,6 +67,9 @@ class Config:
     SHARE_DEFAULT_EXPIRE_DAYS = 7  # 默认分享有效期（天）
     SHARE_MAX_EXPIRE_DAYS = 30     # 最大分享有效期（天）
 
+    # ========== 回收站配置 ==========
+    TRASH_RETENTION_DAYS = 30  # 回收站文件保留天数，超过则自动永久删除
+
     # ========== 日志配置 ==========
     LOG_LEVEL = 'INFO'
     LOG_FILE = os.path.join(BASE_DIR, 'logs', 'app.log')

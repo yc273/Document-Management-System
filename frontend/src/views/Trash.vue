@@ -48,26 +48,36 @@
           >
             <el-table-column type="selection" width="55" />
 
-            <el-table-column label="文件名" min-width="200">
+            <el-table-column label="名称" min-width="200">
               <template #default="{ row }">
                 <div class="file-name-cell">
-                  <el-icon :size="24" :color="getFileIconColor(row.file_type)">
-                    <component :is="getFileIcon(row.file_type)" />
+                  <el-icon :size="24" :color="row.item_type === 'folder' ? '#E6A23C' : getFileIconColor(row.file_type)">
+                    <Folder v-if="row.item_type === 'folder'" />
+                    <component v-else :is="getFileIcon(row.file_type)" />
                   </el-icon>
-                  <span class="file-name">{{ row.original_name }}</span>
+                  <span class="file-name">{{ row.item_type === 'folder' ? row.name : row.original_name }}</span>
+                  <el-tag v-if="row.item_type === 'folder'" size="small" type="warning" style="margin-left: 6px">
+                    文件夹
+                  </el-tag>
                 </div>
               </template>
             </el-table-column>
 
-            <el-table-column prop="file_type" label="类型" width="100" align="center">
+            <el-table-column label="类型" width="100" align="center">
               <template #default="{ row }">
-                <el-tag size="small" type="info">
-                  {{ row.file_type.toUpperCase() }}
+                <el-tag v-if="row.item_type === 'folder'" size="small" type="warning">文件夹</el-tag>
+                <el-tag v-else size="small" type="info">
+                  {{ row.file_type ? row.file_type.toUpperCase() : '-' }}
                 </el-tag>
               </template>
             </el-table-column>
 
-            <el-table-column prop="file_size_readable" label="大小" width="120" align="right" />
+            <el-table-column label="大小/内容" width="120" align="right">
+              <template #default="{ row }">
+                <span v-if="row.item_type === 'folder'">{{ row.inner_file_count || 0 }} 个文件</span>
+                <span v-else>{{ row.file_size_readable }}</span>
+              </template>
+            </el-table-column>
 
             <el-table-column prop="deleted_at" label="删除时间" width="180" align="center">
               <template #default="{ row }">
@@ -157,19 +167,41 @@
     <el-dialog
       v-model="restoreDialogVisible"
       title="选择恢复位置"
-      width="400px"
+      width="450px"
     >
       <el-form :model="restoreForm" label-width="80px">
+        <el-form-item label="文件名">
+          <span class="restore-file-name">{{ restoreForm.fileName }}</span>
+        </el-form-item>
+        <el-form-item v-if="restoreForm.originalFolderName" label="原位置">
+          <el-tag :type="restoreForm.originalFolderExists ? 'info' : 'danger'" size="small">
+            {{ restoreForm.originalFolderName }}
+            <span v-if="!restoreForm.originalFolderExists">（已删除）</span>
+          </el-tag>
+        </el-form-item>
         <el-form-item label="恢复到">
-          <el-select v-model="restoreForm.folder_id" placeholder="选择目标文件夹">
-            <el-option label="根目录" :value="0" />
-            <!-- TODO: 添加文件夹树选择 -->
-          </el-select>
+          <el-tree-select
+            v-model="restoreForm.folder_id"
+            :data="folderTreeData"
+            :props="{ label: 'name', value: 'id', children: 'children' }"
+            :render-after-expand="false"
+            check-strictly
+            node-key="id"
+            placeholder="选择目标文件夹"
+            style="width: 100%"
+          >
+            <template #default="{ data }">
+              <span>
+                <el-icon style="vertical-align: middle;"><Folder /></el-icon>
+                {{ data.name }}
+              </span>
+            </template>
+          </el-tree-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="restoreDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleConfirmRestore">确定</el-button>
+        <el-button type="primary" @click="handleConfirmRestore">确定恢复</el-button>
       </template>
     </el-dialog>
   </div>
@@ -180,9 +212,12 @@ import { ref, onMounted } from 'vue'
 import {
   getTrashList,
   restoreFile,
+  restoreFolder,
   permanentDelete,
+  permanentDeleteFolder,
   clearTrash
 } from '@/api/trash'
+import { getFolderList } from '@/api/folder'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Delete,
@@ -191,7 +226,8 @@ import {
   Document,
   Picture,
   Headset,
-  Files
+  Files,
+  Folder
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 
@@ -207,8 +243,51 @@ const total = ref(0)
 const restoreDialogVisible = ref(false)
 const restoreForm = ref({
   id: null,
-  folder_id: 0
+  folder_id: 0,
+  fileName: '',
+  originalFolderName: '',
+  originalFolderExists: true
 })
+// 文件夹树（用于恢复时选择目标位置）
+const folderTreeData = ref([])
+// 文件夹ID -> 名称 的扁平映射，用于查找原文件夹名
+const folderNameMap = ref({})
+
+// 将树形数据扁平化成 { id: name } 映射
+const buildFolderNameMap = (nodes, map = {}) => {
+  for (const node of nodes || []) {
+    map[node.id] = node.name
+    if (node.children && node.children.length) {
+      buildFolderNameMap(node.children, map)
+    }
+  }
+  return map
+}
+
+// 深度优先取出文件夹树中的第一个文件夹ID（即"全部文件"下的第一个）
+const getFirstFolderId = (nodes) => {
+  for (const node of nodes || []) {
+    if (node.id) return node.id
+    if (node.children && node.children.length) {
+      const found = getFirstFolderId(node.children)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+// 加载文件夹树
+const loadFolderTree = async () => {
+  try {
+    const res = await getFolderList()
+    if (res.code === 200) {
+      folderTreeData.value = res.data.folders || []
+      folderNameMap.value = buildFolderNameMap(folderTreeData.value)
+    }
+  } catch (e) {
+    console.error('加载文件夹列表失败:', e)
+  }
+}
 
 // 加载回收站列表
 const loadTrashList = async () => {
@@ -235,19 +314,65 @@ const handleSelectionChange = (selection) => {
   selectedFiles.value = selection
 }
 
-// 恢复文件
-const handleRestore = (file) => {
+// 恢复（根据 item_type 路由）
+const handleRestore = async (row) => {
+  // 文件夹：整体恢复（不需要选目标位置，恢复到原父文件夹，不在则回根目录）
+  if (row.item_type === 'folder') {
+    try {
+      const res = await restoreFolder(row.id)
+      if (res.code === 200) {
+        ElMessage.success('文件夹已恢复')
+        await loadTrashList()
+        selectedFiles.value = []
+      }
+    } catch (error) {
+      ElMessage.error('恢复失败')
+    }
+    return
+  }
+
+  // 文件：走原有的选目标文件夹流程
+  if (folderTreeData.value.length === 0) {
+    await loadFolderTree()
+  }
+
+  // 没有任何文件夹时，无法恢复（文件必须放到某个文件夹下）
+  const firstFolderId = getFirstFolderId(folderTreeData.value)
+  if (!firstFolderId) {
+    ElMessage.warning('请先创建文件夹后再恢复文件')
+    return
+  }
+
+  const originalFolderId = row.original_folder_id || 0
+  const originalExists = row.original_folder_exists !== false &&
+    folderNameMap.value[originalFolderId] !== undefined
+
+  // 默认恢复到原位置（若原文件夹还在）；否则默认选第一个文件夹
+  const defaultFolderId = originalExists ? originalFolderId : firstFolderId
+
   restoreForm.value = {
-    id: file.id,
-    folder_id: file.original_folder_id || 0
+    id: row.id,
+    fileName: row.original_name,
+    folder_id: defaultFolderId,
+    originalFolderName: originalFolderId === 0
+      ? '根目录'
+      : (folderNameMap.value[originalFolderId] || `文件夹#${originalFolderId}`),
+    originalFolderExists: row.original_folder_exists !== false
   }
   restoreDialogVisible.value = true
 }
 
 // 确认恢复
 const handleConfirmRestore = async () => {
+  // 必须选择一个真实文件夹
+  if (!restoreForm.value.folder_id) {
+    ElMessage.warning('请选择要恢复到的文件夹')
+    return
+  }
   try {
-    const res = await restoreFile(restoreForm.value.id)
+    const res = await restoreFile(restoreForm.value.id, {
+      folder_id: restoreForm.value.folder_id
+    })
     if (res.code === 200) {
       ElMessage.success('恢复成功')
       restoreDialogVisible.value = false
@@ -266,8 +391,19 @@ const handleBatchRestore = async () => {
     return
   }
 
+  // 确保文件夹树已加载
+  if (folderTreeData.value.length === 0) {
+    await loadFolderTree()
+  }
+  // 没有文件夹则无法恢复（文件必须放到某个文件夹下）
+  const firstFolderId = getFirstFolderId(folderTreeData.value)
+  if (!firstFolderId) {
+    ElMessage.warning('请先创建文件夹后再恢复文件')
+    return
+  }
+
   ElMessageBox.confirm(
-    `确定要恢复选中的 ${selectedFiles.value.length} 个文件吗？`,
+    `确定要恢复选中的 ${selectedFiles.value.length} 项吗？`,
     '批量恢复',
     {
       confirmButtonText: '确定',
@@ -276,9 +412,18 @@ const handleBatchRestore = async () => {
     }
   ).then(async () => {
     try {
-      // 逐个恢复
-      for (const file of selectedFiles.value) {
-        await restoreFile(file.id)
+      for (const item of selectedFiles.value) {
+        if (item.item_type === 'folder') {
+          // 文件夹整体恢复
+          await restoreFolder(item.id)
+        } else {
+          // 文件：原文件夹还在则回原处，否则放到第一个文件夹
+          const originalFolderId = item.original_folder_id || 0
+          const originalExists = item.original_folder_exists !== false &&
+            folderNameMap.value[originalFolderId] !== undefined
+          const targetId = originalExists ? originalFolderId : firstFolderId
+          await restoreFile(item.id, { folder_id: targetId })
+        }
       }
       ElMessage.success('批量恢复成功')
       await loadTrashList()
@@ -289,19 +434,25 @@ const handleBatchRestore = async () => {
   }).catch(() => {})
 }
 
-// 永久删除
-const handlePermanentDelete = (file) => {
-  ElMessageBox.confirm(
-    `确定要永久删除"${file.original_name}"吗？永久删除后将无法恢复！`,
-    '永久删除',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'error'
-    }
-  ).then(async () => {
+// 永久删除（根据 item_type 路由）
+const handlePermanentDelete = (row) => {
+  const isFolder = row.item_type === 'folder'
+  const displayName = isFolder ? row.name : row.original_name
+  const tip = isFolder
+    ? `确定要永久删除文件夹"${displayName}"吗？文件夹内的所有文件也将被永久删除，无法恢复！`
+    : `确定要永久删除"${displayName}"吗？永久删除后将无法恢复！`
+
+  ElMessageBox.confirm(tip, '永久删除', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'error'
+  }).then(async () => {
     try {
-      await permanentDelete(file.id)
+      if (isFolder) {
+        await permanentDeleteFolder(row.id)
+      } else {
+        await permanentDelete(row.id)
+      }
       ElMessage.success('永久删除成功')
       await loadTrashList()
       selectedFiles.value = []
@@ -319,7 +470,7 @@ const handleBatchDelete = async () => {
   }
 
   ElMessageBox.confirm(
-    `确定要永久删除选中的 ${selectedFiles.value.length} 个文件吗？永久删除后将无法恢复！`,
+    `确定要永久删除选中的 ${selectedFiles.value.length} 项吗？永久删除后将无法恢复！`,
     '批量永久删除',
     {
       confirmButtonText: '确定',
@@ -328,9 +479,13 @@ const handleBatchDelete = async () => {
     }
   ).then(async () => {
     try {
-      // 逐个删除
-      for (const file of selectedFiles.value) {
-        await permanentDelete(file.id)
+      // 逐个删除：根据类型调用对应接口
+      for (const item of selectedFiles.value) {
+        if (item.item_type === 'folder') {
+          await permanentDeleteFolder(item.id)
+        } else {
+          await permanentDelete(item.id)
+        }
       }
       ElMessage.success('批量永久删除成功')
       await loadTrashList()
@@ -344,7 +499,7 @@ const handleBatchDelete = async () => {
 // 清空回收站
 const handleClearTrash = () => {
   ElMessageBox.confirm(
-    '确定要清空回收站吗？清空后所有文件将被永久删除，无法恢复！',
+    '确定要清空回收站吗？清空后所有文件和文件夹将被永久删除，无法恢复！',
     '清空回收站',
     {
       confirmButtonText: '确定',
@@ -425,6 +580,12 @@ onMounted(() => {
 .trash {
   height: 100%;
   padding: 0;
+}
+
+.restore-file-name {
+  font-weight: 600;
+  color: #303133;
+  word-break: break-all;
 }
 
 .trash-card {
