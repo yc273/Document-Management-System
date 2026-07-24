@@ -125,6 +125,10 @@
                       <el-icon><Edit /></el-icon>
                       重命名
                     </el-button>
+                    <el-button type="warning" size="small" link @click="handleMoveSingle(row)">
+                      <el-icon><FolderOpened /></el-icon>
+                      移动
+                    </el-button>
                     <el-button type="danger" size="small" link @click="handleDelete(row)">
                       <el-icon><Delete /></el-icon>
                       删除
@@ -319,6 +323,10 @@
         <div class="context-menu-item" @click="handleShare(contextMenuFile)">
           <el-icon><Share /></el-icon>
           分享
+        </div>
+        <div class="context-menu-item" @click="handleMoveSingle(contextMenuFile)">
+          <el-icon><FolderOpened /></el-icon>
+          移动
         </div>
         <div class="context-menu-item" @click="handleRename(contextMenuFile)">
           <el-icon><Edit /></el-icon>
@@ -859,12 +867,8 @@ const handleBatchShare = () => {
 
 // 批量移动
 // 移动文件
-const handleBatchMove = async () => {
-  if (selectedFiles.value.length === 0) {
-    ElMessage.warning('请先选择要移动的文件')
-    return
-  }
-
+// 打开移动对话框的公共逻辑
+const openMoveDialog = async (fileIds) => {
   // 加载文件夹树（用于选择目标位置）
   try {
     const res = await getFolderList()
@@ -884,11 +888,26 @@ const handleBatchMove = async () => {
   }
 
   moveForm.value = {
-    fileIds: selectedFiles.value.map(f => f.id),
-    fileCount: selectedFiles.value.length,
+    fileIds: fileIds,
+    fileCount: fileIds.length,
     targetFolderId: null
   }
   moveVisible.value = true
+}
+
+// 批量移动
+const handleBatchMove = () => {
+  if (selectedFiles.value.length === 0) {
+    ElMessage.warning('请先选择要移动的文件')
+    return
+  }
+  openMoveDialog(selectedFiles.value.map(f => f.id))
+}
+
+// 单个文件移动
+const handleMoveSingle = (file) => {
+  openMoveDialog([file.id])
+  closeContextMenu()
 }
 
 // 确认移动

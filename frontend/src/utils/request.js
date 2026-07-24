@@ -54,11 +54,25 @@ request.interceptors.response.use(
 
     return res
   },
-  error => {
+  async error => {
     console.error('响应错误:', error)
 
     if (error.response) {
-      const { status } = error.response
+      const { status, data } = error.response
+
+      // blob 类型的错误响应需要先读取文本才能拿到后端的错误信息
+      let errMsg = '请求失败'
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text()
+          const parsed = JSON.parse(text)
+          errMsg = parsed.message || errMsg
+        } catch (e) {
+          errMsg = '请求失败'
+        }
+      } else {
+        errMsg = data?.message || errMsg
+      }
 
       switch (status) {
         case 401:
@@ -71,13 +85,13 @@ request.interceptors.response.use(
           ElMessage.error('权限不足')
           break
         case 404:
-          ElMessage.error('请求的资源不存在')
+          ElMessage.error(errMsg || '请求的资源不存在')
           break
         case 500:
           ElMessage.error('服务器错误')
           break
         default:
-          ElMessage.error(error.response.data?.message || '请求失败')
+          ElMessage.error(errMsg)
       }
     } else {
       ElMessage.error('网络错误，请检查网络连接')

@@ -598,13 +598,16 @@ def batch_download_files():
         ip_address=request.remote_addr
     )
 
-    # 流式返回ZIP
-    return send_file(
-        memory_zip,
+    # 流式返回ZIP（显式提供文件大小，避免浏览器无法触发下载）
+    zip_data = memory_zip.getvalue()
+    response = send_file(
+        io.BytesIO(zip_data),
         mimetype='application/zip',
         as_attachment=True,
-        download_name='批量下载.zip'
+        download_name='batch_download.zip'
     )
+    response.headers['Content-Length'] = len(zip_data)
+    return response
 
 
 # ==================== 分片上传 ====================
